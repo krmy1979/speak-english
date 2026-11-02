@@ -112,26 +112,129 @@ function handleMicError(code, labelEl){
 const norm = t => t.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).filter(Boolean);
 const NUMS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10",eleven:"11",fifty:"50"};
 const canon = w => { w = w.replace(/'/g, ""); return NUMS[w] || w; };
-function marks(target, said){
+// מיישר את מה שנאמר מול המשפט, ולכל מילה שומר אם נשמעה ומה נשמע במקומה
+function align(target, said){
   const T = target.map(canon), S = said.map(canon), n = T.length, m = S.length;
   const dp = Array.from({length:n+1}, () => new Array(m+1).fill(0));
   for(let i = n-1; i >= 0; i--) for(let j = m-1; j >= 0; j--)
     dp[i][j] = T[i] === S[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
-  const ok = new Array(n).fill(false); let i = 0, j = 0;
-  while(i < n && j < m){ if(T[i] === S[j]){ ok[i] = true; i++; j++; } else if(dp[i+1][j] >= dp[i][j+1]) i++; else j++; }
-  return ok;
+  const res = target.map(() => ({ok:false, heard:null}));
+  let i = 0, j = 0, gT = [], gS = [];
+  const flush = () => { gT.forEach((ti, k) => { if(k < gS.length) res[ti].heard = said[gS[k]]; }); gT = []; gS = []; };
+  while(i < n || j < m){
+    if(i < n && j < m && T[i] === S[j]){ flush(); res[i].ok = true; i++; j++; }
+    else if(j >= m || (i < n && dp[i+1][j] >= dp[i][j+1])){ gT.push(i); i++; }
+    else { gS.push(j); j++; }
+  }
+  flush();
+  return res;
 }
+const numify = t => t.replace(/\d/g, d => " " + Object.keys(NUMS).find(k => NUMS[k] === d) + " ");
 function grade(targetText, alts){
-  // מתעלם מ"..." ומספרים שנכתבו כספרות
-  const target = norm(targetText.replace(/\d/g, d => " " + Object.keys(NUMS).find(k => NUMS[k] === d) + " "));
+  const words = targetText.split(/\s+/);
+  const groups = words.map(w => norm(numify(w)));
+  const flat = groups.flat();
   let best = null;
   for(const a of alts){
-    const ok = marks(target, norm(a)); const sc = ok.filter(Boolean).length / Math.max(target.length, 1);
-    if(!best || sc > best.sc) best = {sc, ok, text:a};
+    const r = align(flat, norm(a));
+    const sc = r.filter(x => x.ok).length / Math.max(flat.length, 1);
+    if(!best || sc > best.sc) best = {sc, r, text:a};
   }
+  let k = 0;
+  best.words = groups.map((g, wi) => {
+    const part = best.r.slice(k, k + g.length); k += g.length;
+    return {word: words[wi], ok: part.every(x => x.ok), heard: part.map(x => x.heard).filter(Boolean).join(" ") || null};
+  });
+  best.ok = best.words.map(x => x.ok);
   best.pct = Math.round(best.sc * 100);
   best.level = best.pct >= 85 ? 2 : best.pct >= 60 ? 1 : 0;
   return best;
+}
+
+/* ---------- מאמן הגייה: מה לא נשמע טוב ואיך לתקן ---------- */
+const PHON = {
+  "the":"דְה – קצה הלשון בין השיניים", "this":"דִיס – הלשון בין השיניים", "that":"דֶאט – הלשון בין השיניים", "there":"דֶר",
+  "thank":"ת'ֶנְק – הלשון בין השיניים, נושפים", "thanks":"ת'ֶנְקס – הלשון בין השיניים, נושפים", "think":"ת'ִינְק", "three":"ת'רִי", "with":"וִית' / וִיד'",
+  "coffee":"קָאפִי", "please":"פְּלִיז", "could":"קוּד – ה-L שקטה", "would":"ווּד – ה-L שקטה", "should":"שוּד – ה-L שקטה",
+  "know":"נוֹאוּ – ה-K שקטה", "schedule":"סְקֶג'וּל", "recommend":"רֶקוֹמֶנְד – הדגש על מֶנְד", "experience":"אִקְסְפִּירִיאֶנְס",
+  "appointment":"אַפּוֹינְטְמֶנְט", "prescription":"פְּרִיסְקְרִיפְּשֶׁן", "pharmacy":"פָארְמַסִי", "allergic":"אַלֶרְגִ'יק",
+  "penicillin":"פֶּנִיסִילִין", "headache":"הֶדְאֵייק", "available":"אַבֵיילַבְּל", "typical":"טִיפִּיקַל", "challenge":"צֶ'לֶנְג'",
+  "reservation":"רֶזֶרְבֵיישֶׁן", "station":"סְטֵיישֶׁן", "address":"אַדְרֶס", "seat":"סִיייט – ' ארוך", "spicy":"סְפַּייסִי",
+  "check":"צֶ'ק", "size":"סַייז", "return":"רִיטֶרְן", "details":"דִיטֵיילְז", "meeting":"מִיטִינְג", "explain":"אִקְסְפְּלֵיין",
+  "favor":"פֵייבֶר", "congratulations":"קֶנְגְרַצֶ'לֵיישֶׁנְז", "weekend":"וִיקֶנְד", "idea":"אַיידִיאָה", "message":"מֶסֶג'",
+  "breaking":"בְּרֵייקִינְג", "order":"אוֹרְדֶר", "charged":"צָ'ארְג'ד – בסוף ד' ולא אֶד", "manager":"מֶנֶג'ר", "busy":"בִּיזִי",
+  "lately":"לֵייטְלִי", "nice":"נַייס", "meet":"מִיט – אִי ארוכה", "table":"טֵייבְּל", "same":"סֵיים", "isn't":"אִיזְנְט",
+  "perfect":"פֶּרְפֶקְט", "learning":"לֶרְנִינְג", "mean":"מִין – אִי ארוכה", "second":"סֶקֶנְד", "lost":"לוֹסְט", "taken":"טֵייקֶן",
+  "wondering":"וַאנְדֶרִינְג", "work":"וֶרְק – לא ווֹרק", "world":"וֶרְלְד", "walk":"ווֹק – ה-L שקטה", "talk":"טוֹק – ה-L שקטה",
+  "hour":"אַוֶר – ה-H שקטה", "honest":"אוֹנֶסְט – ה-H שקטה", "early":"אֶרְלִי", "there's":"דֶרְז", "it's":"אִיטְס", "i'm":"אַיים",
+  "i'd":"אַייד", "i'll":"אַייל", "you're":"יוּר", "what's":"ווֹאטְס", "how's":"הַאוּז", "let's":"לֶטְס", "hasn't":"הֶזְנְט",
+  "hear":"הִיר", "here":"הִיר", "heard":"הֶרְד", "sure":"שוּר", "great":"גְרֵייט", "fitting":"פִיטִינְג",
+  "rooms":"רוּמְז", "passport":"פָּאסְפּוֹרְט", "breakfast":"בְּרֶקְפַסְט – לא ברייק-פאסט", "miller's":"מִילֶרְז",
+  "office":"אוֹפִיס", "reason":"רִיזֶן", "visit":"וִיזִיט", "tuesday":"טוּזְדֵיי", "oat":"אוֹאוּט", "milk":"מִילְק", "here's":"הִירְז",
+  "area":"אֶרִיאָה", "supermarket":"סוּפֶּרְמָארְקֶט", "corner":"קוֹרְנֶר", "anything":"אֶנִית'ִינְג", "company":"קַאמְפַּנִי",
+  "questions":"קְוֶוסְצֶ'נְז", "year":"יִיר", "years":"יִירְז", "field":"פִילְד", "team":"טִים", "new":"נוּ", "next":"נֶקְסְט",
+  "month":"מַאנְת'", "called":"קוֹלְד – בסוף ד' ולא אֶד", };
+function pronTips(word, heard){
+  const w = cleanWord(word).toLowerCase().replace(/’/g, "'"), h = (heard || "").toLowerCase();
+  const tips = [];
+  const say = heard ? `שמעתי "${heard}" במקום "${cleanWord(word)}". ` : "";
+  if(!heard) tips.push("המילה לא נשמעה בכלל. כנראה נבלעה או נאמרה מהר מדי. הקשב לה לאט ותגיד אותה ברור.");
+  if(/th/.test(w)){
+    if(heard && /^(t|d|s|z|f)/.test(h) && /^th/.test(w)) tips.push(say + "ב-TH שים את קצה הלשון בין השיניים ונשוף אוויר. לא ט', לא ס' ולא ד'.");
+    else tips.push("ב-TH הלשון יוצאת קצת בין השיניים ונושפים. זה הצליל הכי קשה לישראלים, תתרגל אותו לאט.");
+  }
+  if(/^wh?[aeiouy]/.test(w) && heard && /^v/.test(h)) tips.push(say + "W היא לא V: עגל את השפתיים כמו 'אוּ', בלי לגעת בשיניים.");
+  else if(/^v/.test(w) && heard && /^w/.test(h)) tips.push(say + "V: השיניים העליונות נוגעות בשפה התחתונה.");
+  if(/^kn|^wr|mb$|ould$|alk$|^ho(ur|nest)/.test(w)) tips.push("יש פה אות שקטה שלא אומרים. הקשב לאיך שהמילה נשמעת, לא לאיך שהיא כתובה.");
+  if(/ed$/.test(w) && w.length > 4) tips.push("סיומת ED: אחרי t/d אומרים 'אִיד', אחרי צלילים קשים כמו k/p/s/sh/ch אומרים 'ט', ובשאר 'ד'. לא 'אֶד' מלא.");
+  if(/ing$/.test(w)) tips.push("סיים ב-NG רך מהאף, בלי ג' בסוף: 'מִיטִינְג' ולא 'מיטינגג'.");
+  if(heard && (/ee|ea/.test(w) && /i(?!e)/.test(h) && !/ee|ea/.test(h))) tips.push(say + "אִי ארוכה: מתח את הצליל, כמו 'מִייט'. אִי קצרה משנה את המילה.");
+  if(heard && h.length < w.length && w.startsWith(h.slice(0, Math.max(2, h.length - 1)))) tips.push(say + "אל תבלע את סוף המילה. תגיד את העיצורים בסוף בבירור.");
+  if(/r/.test(w) && heard && !/r/.test(h)) tips.push("R אמריקאי: הלשון מתקפלת אחורה ולא נוגעת בשום מקום. לא ר' גרונית.");
+  if(/^h/.test(w) && !/^ho(ur|nest)/.test(w)) tips.length < 2 && heard && !/^h/.test(h) && tips.push(say + "H באנגלית היא נשיפה רכה, לא ח'.");
+  if(heard && !tips.some(t => t.startsWith("שמעתי"))) tips.unshift(say + "הקשב לאט וחזור על המילה לבד, ואז את כל המשפט.");
+  return {phon: PHON[w] || "", tips: [...new Set(tips)].slice(0, 2)};
+}
+function renderFixes(container, words, max = 4){
+  container.innerHTML = "";
+  const wrong = words.filter(x => !x.ok && cleanWord(x.word));
+  if(!wrong.length){ container.hidden = true; return; }
+  container.hidden = false;
+  const h = document.createElement("div"); h.className = "fixes-title";
+  h.textContent = wrong.length === 1 ? "מילה אחת לתקן" : `${Math.min(wrong.length, max)} מילים לתקן`;
+  container.appendChild(h);
+  wrong.slice(0, max).forEach(x => {
+    const {phon, tips} = pronTips(x.word, x.heard);
+    const row = document.createElement("div"); row.className = "fix";
+    row.innerHTML = `<div class="fix-head"><bdi class="fix-word" lang="en"></bdi><span class="fix-phon"></span></div><ul class="fix-tips"></ul>
+      <div class="row fix-actions"><button class="btn sm fx-slow">שמע לאט</button><button class="btn sm fx-try">תרגל את המילה</button><span class="fix-res"></span></div>`;
+    row.querySelector(".fix-word").textContent = cleanWord(x.word);
+    row.querySelector(".fix-phon").textContent = phon ? "נשמע כמו: " + phon : "";
+    const ul = row.querySelector(".fix-tips");
+    tips.forEach(t => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+    row.querySelector(".fx-slow").onclick = () => speak(cleanWord(x.word), 0.6);
+    row.querySelector(".fx-try").onclick = () => practiceWord(x.word, row);
+    container.appendChild(row);
+  });
+}
+async function practiceWord(word, row){
+  const res = row.querySelector(".fix-res"), btn = row.querySelector(".fx-try");
+  const target = canon(norm(numify(word))[0] || "");
+  if(!micOK){ await speak(cleanWord(word), 0.6); res.textContent = "תגיד אותה בקול 3 פעמים, לאט ואז מהר."; return; }
+  if(listening){ rec.stop(); return; }
+  await speak(cleanWord(word), 0.6);
+  btn.classList.add("on"); res.className = "fix-res"; res.textContent = "מקשיב... תגיד רק את המילה";
+  try{
+    const alts = await listenOnce(t => res.textContent = t);
+    btn.classList.remove("on");
+    const hit = alts.some(a => norm(a).map(canon).includes(target));
+    if(hit){ res.className = "fix-res good"; res.textContent = "מצוין! עכשיו תגיד את כל המשפט שוב."; }
+    else {
+      const heard = norm(alts[0]).join(" ");
+      const t = pronTips(word, heard).tips[0] || "";
+      res.className = "fix-res bad"; res.textContent = `שמעתי "${heard}". ${t.replace(/^שמעתי "[^"]*" במקום "[^"]*"\. /, "")}`;
+    }
+  }catch(code){ btn.classList.remove("on"); handleMicError(code, res); }
 }
 
 /* ---------- הקלטה עצמית ---------- */
@@ -234,7 +337,7 @@ function show(){
   en.classList.toggle("hidden-en", challenge);
   $("reveal").hidden = !challenge;
   $("tip").textContent = challenge ? "" : (s.tip || "");
-  $("result").hidden = true;
+  $("result").hidden = true; $("fixes").innerHTML = "";
   $("selfrate").hidden = micOK;
   $("micLabel").textContent = !micOK ? "תגיד את המשפט בקול, ואז דרג את עצמך"
     : challenge ? "תגיד את המשפט באנגלית מהזיכרון" : "לחץ ותגיד את המשפט באנגלית";
@@ -269,6 +372,7 @@ function showGrade(g){
     w.appendChild(sp);
   });
   const h = $("heard"); h.textContent = "שמעתי: "; const b = document.createElement("bdi"); b.textContent = g.text; h.appendChild(b);
+  renderFixes($("fixes"), g.words);
   $("en").classList.remove("hidden-en");
   // בחזרה: שומרים את הציון הטוב ביותר; בתרגול רגיל: את האחרון
   const prev = store.mastery[s.en];
@@ -294,7 +398,7 @@ $("next").onclick = () => {
 $("challenge").onchange = () => { if(mode === "practice" || mode === "review") show(); if(mode === "talk" && turnIdx >= 0) renderTurnTarget(); };
 
 /* ---------- שיחות ---------- */
-let scen = null, turnIdx = -1, scores = [], attempts = 0, talkRun = 0;
+let scen = null, turnIdx = -1, scores = [], attempts = 0, talkRun = 0, talkMistakes = [];
 function showScenarios(){
   $("scenPick").hidden = false; $("scenRun").hidden = true; turnIdx = -1; talkRun++;
   const el = $("scenList"); el.innerHTML = "";
@@ -316,7 +420,7 @@ function bubble(cls, en, he, scoreTxt, scoreCls){
   $("chat").appendChild(b); $("chat").scrollTop = $("chat").scrollHeight;
 }
 function runScenario(d){
-  scen = d; turnIdx = 0; scores = []; talkRun++;
+  scen = d; turnIdx = 0; scores = []; talkMistakes = []; talkRun++; $("scenFixes").innerHTML = "";
   $("scenPick").hidden = true; $("scenRun").hidden = false; $("scenDone").hidden = true;
   $("scenTitle").textContent = d.name; $("chat").innerHTML = "";
   step(talkRun);
@@ -331,7 +435,7 @@ async function step(run){
     turnIdx++;
   }
   if(turnIdx >= scen.turns.length){ finishScenario(); return; }
-  attempts = 0;
+  attempts = 0; $("ytFixes").innerHTML = ""; $("ytFixes").hidden = true;
   $("yourTurn").hidden = false; $("ytSelf").hidden = micOK;
   $("ytHe").textContent = scen.turns[turnIdx].he;
   renderTurnTarget();
@@ -358,8 +462,13 @@ $("ytMic").onclick = async () => {
     const alts = await listenOnce(t => $("ytLabel").textContent = t);
     $("ytMic").classList.remove("on");
     const g = grade(target, alts); attempts++;
-    if(g.pct >= 60 || attempts >= 3) acceptAnswer(target, g.pct);
-    else { $("ytLabel").textContent = `${g.pct}% · לחץ "איך אומרים", ואז נסה שוב`; $("ytEn").classList.remove("hidden-en"); }
+    if(g.pct >= 60 || attempts >= 3){
+      g.words.forEach(x => { if(!x.ok && cleanWord(x.word) && !talkMistakes.some(m => m.word === x.word)) talkMistakes.push(x); });
+      acceptAnswer(target, g.pct);
+    } else {
+      $("ytLabel").textContent = `${g.pct}% · תקן את המילים למטה ונסה שוב`; $("ytEn").classList.remove("hidden-en");
+      renderFixes($("ytFixes"), g.words, 3);
+    }
   }catch(code){ $("ytMic").classList.remove("on"); handleMicError(code, $("ytLabel")); if(!micOK) $("ytSelf").hidden = false; }
 };
 $("ytSelf").addEventListener("click", e => {
@@ -374,6 +483,7 @@ function finishScenario(){
   const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   store.dialogBest[scen.id] = Math.max(store.dialogBest[scen.id] || 0, avg); save();
   $("scenDone").hidden = false;
+  renderFixes($("scenFixes"), talkMistakes, 6);
   $("scenScore").textContent = avg >= 85 ? `${avg}% · ניהלת שיחה שלמה באנגלית!` : avg >= 60 ? `${avg}% · שיחה טובה. עוד סבב ואתה שם.` : `${avg}% · התחלה טובה. נסה שוב, הפעם יהיה קל יותר.`;
 }
 $("scenBack").onclick = $("scenOthers").onclick = () => { if(hasTTS) speechSynthesis.cancel(); showScenarios(); };

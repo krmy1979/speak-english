@@ -136,6 +136,18 @@ h2{font-family:var(--f-display);font-weight:400;font-size:1.25rem;margin:0}
 .opt.wrong{background:var(--bad-soft);border-color:var(--bad)}
 .bigscore{font-family:var(--f-display);font-size:2.4rem;text-align:center;line-height:1}
 
+.fixes{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.fixes-title{font-family:var(--f-display);font-size:1.05rem}
+.fix{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.fix-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.fix-word{font:600 1.2rem var(--f-en);color:var(--bad)}
+.fix-phon{font-size:.95rem;color:var(--ink)}
+.fix-tips{margin:0;padding-inline-start:18px;font-size:.92rem;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.fix-actions{gap:8px}
+.btn.sm{padding:6px 12px;font-size:.9rem;border-radius:10px}
+.btn.on{background:var(--mic);color:var(--mic-ink);border-color:var(--mic-edge)}
+.fix-res{font-size:.9rem;font-weight:600;color:var(--muted);flex-basis:100%}
+.fix-res.good{color:var(--good)} .fix-res.bad{color:var(--bad)}
 .coach{display:flex;flex-direction:column;gap:6px}
 .coach ol{margin:0;padding-inline-start:20px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
 .empty{text-align:center;color:var(--muted);padding:12px}
