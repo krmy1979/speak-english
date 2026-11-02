@@ -1,0 +1,153 @@
+// ===== תוכן האפליקציה: משפטים לפי נושאים + שיחות תרגול =====
+// כל משפט: [אנגלית, עברית, טיפ (אפשר ריק)]
+
+window.TOPICS = [
+ {id:"small", name:"שיחת חולין", items:[
+  ["Hi, how's it going?","היי, מה נשמע?","תשובה טבעית: Pretty good, thanks. And you?"],
+  ["Nice to meet you.","נעים להכיר.",""],
+  ["What do you do for a living?","במה אתה עובד?",""],
+  ["Where are you from?","מאיפה אתה?","תשובה: I'm from Israel."],
+  ["It's really hot today, isn't it?","ממש חם היום, נכון?","isn't it בסוף הופך משפט לשאלה ידידותית."],
+  ["Have a nice day!","שיהיה לך יום נעים!",""],
+  ["See you later.","נתראה אחר כך.",""],
+  ["I've been really busy lately.","הייתי ממש עסוק לאחרונה.",""]]},
+ {id:"cafe", name:"בית קפה ומסעדה", items:[
+  ["Can I get a coffee, please?","אפשר לקבל קפה, בבקשה?","Can I get נשמע טבעי יותר מ-I want."],
+  ["A table for two, please.","שולחן לשניים, בבקשה.",""],
+  ["What do you recommend?","מה אתה ממליץ?",""],
+  ["I'll have the same.","אני אקח אותו דבר.",""],
+  ["Could we have the check, please?","אפשר לקבל את החשבון?","באנגליה אומרים the bill."],
+  ["Is this spicy?","זה חריף?",""],
+  ["To go, please.","לקחת, בבקשה.","בבריטניה: To take away."]]},
+ {id:"shop", name:"קניות", items:[
+  ["How much is this?","כמה זה עולה?",""],
+  ["Do you have this in a bigger size?","יש לכם את זה במידה יותר גדולה?",""],
+  ["I'm just looking, thanks.","אני רק מסתכל, תודה.","תשובה מושלמת כשמוכר שואל Can I help you?"],
+  ["Can I pay by card?","אפשר לשלם בכרטיס?",""],
+  ["Where can I find the milk?","איפה אני יכול למצוא חלב?",""],
+  ["Can I try it on?","אפשר למדוד?",""],
+  ["I'd like to return this.","אני רוצה להחזיר את זה.",""]]},
+ {id:"work", name:"בעבודה", items:[
+  ["I'll get back to you on that.","אחזור אליך לגבי זה.",""],
+  ["Could you send me the details?","תוכל לשלוח לי את הפרטים?",""],
+  ["I'm running a few minutes late.","אני מאחר בכמה דקות.",""],
+  ["Let me check and let you know.","תן לי לבדוק ואעדכן אותך.",""],
+  ["That sounds good to me.","נשמע לי טוב.",""],
+  ["Can we schedule a meeting for tomorrow?","אפשר לקבוע פגישה למחר?",""],
+  ["I'm not sure I understand. Can you explain?","אני לא בטוח שהבנתי. תוכל להסביר?",""]]},
+ {id:"interview", name:"ראיון עבודה", items:[
+  ["Thank you for having me.","תודה שהזמנתם אותי.","משפט פתיחה מנומס לראיון."],
+  ["I have five years of experience in this field.","יש לי חמש שנות ניסיון בתחום.",""],
+  ["I'm a fast learner and I work well in a team.","אני לומד מהר ועובד טוב בצוות.",""],
+  ["I'm looking for a new challenge.","אני מחפש אתגר חדש.",""],
+  ["What does a typical day look like?","איך נראה יום עבודה רגיל?","שאלה טובה לשאול את המראיין."],
+  ["When can I expect to hear from you?","מתי אוכל לצפות לשמוע מכם?",""],
+  ["I'm available to start next month.","אני זמין להתחיל בחודש הבא.",""]]},
+ {id:"phone", name:"בטלפון", items:[
+  ["Hi, this is Ronen speaking.","היי, מדבר רונן.","בטלפון אומרים this is ולא I am."],
+  ["Can you hear me okay?","אתה שומע אותי טוב?",""],
+  ["Sorry, you're breaking up.","סליחה, אתה נקטע לי.",""],
+  ["Could you call me back later?","תוכל לחזור אליי אחר כך?",""],
+  ["I'd like to make an appointment.","אני רוצה לקבוע תור.",""],
+  ["Can I leave a message?","אפשר להשאיר הודעה?",""],
+  ["Thanks for calling.","תודה שהתקשרת.",""]]},
+ {id:"service", name:"שירות לקוחות", items:[
+  ["I have a problem with my order.","יש לי בעיה עם ההזמנה שלי.",""],
+  ["It still hasn't arrived.","זה עדיין לא הגיע.",""],
+  ["I was charged twice.","חייבו אותי פעמיים.",""],
+  ["Could I speak to a manager, please?","אפשר לדבר עם מנהל, בבקשה?",""],
+  ["My order number is four, five, two, one.","מספר ההזמנה שלי הוא 4521.","מספרים אומרים ספרה אחרי ספרה."],
+  ["How long will it take?","כמה זמן זה ייקח?",""],
+  ["Thanks for your help.","תודה על העזרה.",""]]},
+ {id:"friends", name:"חברים ושכנים", items:[
+  ["Do you want to grab a coffee sometime?","בא לך לשבת על קפה מתישהו?",""],
+  ["What are you up to this weekend?","מה אתה עושה בסופ\"ש?",""],
+  ["That's a great idea!","זה רעיון מעולה!",""],
+  ["I'm sorry to hear that.","צר לי לשמוע.","תגובה לחדשות לא טובות."],
+  ["Congratulations! I'm so happy for you.","מזל טוב! אני כל כך שמח בשבילך.",""],
+  ["Could you do me a favor?","תוכל לעשות לי טובה?",""],
+  ["Let's keep in touch.","בוא נשמור על קשר.",""]]},
+ {id:"travel", name:"נסיעות", items:[
+  ["Excuse me, where is the train station?","סליחה, איפה תחנת הרכבת?",""],
+  ["How long does it take to get there?","כמה זמן לוקח להגיע לשם?",""],
+  ["I have a reservation under Cohen.","יש לי הזמנה על שם כהן.",""],
+  ["What time is check-out?","באיזו שעה הצ'ק-אאוט?",""],
+  ["Can you take me to this address?","אתה יכול לקחת אותי לכתובת הזאת?",""],
+  ["Is this seat taken?","המקום הזה תפוס?",""],
+  ["I think I'm lost.","נראה לי שהלכתי לאיבוד.",""]]},
+ {id:"help", name:"כשלא מבינים", items:[
+  ["Sorry, could you say that again?","סליחה, תוכל להגיד את זה שוב?","המשפט הכי חשוב לביטחון: מותר לבקש שוב."],
+  ["Could you speak a little slower, please?","תוכל לדבר קצת יותר לאט?",""],
+  ["What does that mean?","מה זה אומר?",""],
+  ["How do you say this in English?","איך אומרים את זה באנגלית?",""],
+  ["My English isn't perfect, but I'm learning.","האנגלית שלי לא מושלמת, אבל אני לומד.","אנשים מגיבים לזה בהמון סבלנות."],
+  ["Do you mean...?","אתה מתכוון ל...?",""],
+  ["Let me think for a second.","תן לי לחשוב שנייה.","קונה לך זמן בלי לחץ."]]},
+ {id:"doctor", name:"רופא ובית מרקחת", items:[
+  ["I don't feel well.","אני לא מרגיש טוב.",""],
+  ["I have a headache.","כואב לי הראש.",""],
+  ["It started two days ago.","זה התחיל לפני יומיים.",""],
+  ["Do I need a prescription for this?","צריך מרשם בשביל זה?",""],
+  ["How often should I take it?","כל כמה זמן לקחת את זה?",""],
+  ["I'm allergic to penicillin.","אני אלרגי לפניצילין.",""],
+  ["Is there a pharmacy nearby?","יש בית מרקחת קרוב?",""]]}
+];
+
+// ===== שיחות תרגול: הצד השני מדבר, אתה עונה בקול =====
+// them = מה שהצד השני אומר. you = מה שאתה צריך להגיד (עם רמז בעברית)
+window.DIALOGUES = [
+ {id:"d-cafe", name:"הזמנה בבית קפה", place:"Coffee shop", turns:[
+  {them:"Hi there! What can I get for you?", he:"היי! מה אפשר להביא לך?"},
+  {you:"Can I get a large coffee, please?", he:"תבקש קפה גדול"},
+  {them:"Sure. Would you like milk with that?", he:"בטח. תרצה עם חלב?"},
+  {you:"Yes, please. Oat milk if you have it.", he:"כן, חלב שיבולת שועל אם יש"},
+  {them:"For here or to go?", he:"לשבת או לקחת?"},
+  {you:"To go, please.", he:"לקחת"},
+  {them:"That's four fifty.", he:"זה ארבעה וחמישים"},
+  {you:"Here you go. Thank you!", he:"תשלם ותודה"}]},
+ {id:"d-neighbor", name:"שכן חדש", place:"Neighbors", turns:[
+  {them:"Hi! I just moved in next door. I'm Sarah.", he:"היי! עברתי לגור בדירה ליד. אני שרה."},
+  {you:"Hi Sarah, nice to meet you. I'm Ronen.", he:"תציג את עצמך"},
+  {them:"Nice to meet you too! Have you lived here long?", he:"גם לי נעים! אתה גר פה הרבה זמן?"},
+  {you:"About five years. It's a really nice area.", he:"בערך חמש שנים, שכונה נחמדה"},
+  {them:"Good to know. Is there a good supermarket nearby?", he:"טוב לדעת. יש סופר טוב קרוב?"},
+  {you:"Yes, there's one just around the corner.", he:"כן, ממש מעבר לפינה"},
+  {them:"Great, thanks so much!", he:"מעולה, תודה רבה!"},
+  {you:"No problem. Let me know if you need anything.", he:"אין בעיה, תגידי אם צריך משהו"}]},
+ {id:"d-interview", name:"ראיון עבודה", place:"Job interview", turns:[
+  {them:"Thanks for coming in today. Please, have a seat.", he:"תודה שבאת היום. שב בבקשה."},
+  {you:"Thank you for having me.", he:"תודה שהזמנתם"},
+  {them:"So, tell me a little about yourself.", he:"ספר לי קצת על עצמך."},
+  {you:"I have five years of experience in this field.", he:"יש לך חמש שנות ניסיון בתחום"},
+  {them:"Why do you want to work here?", he:"למה אתה רוצה לעבוד כאן?"},
+  {you:"I'm looking for a new challenge, and I like your company.", he:"מחפש אתגר חדש ואוהב את החברה"},
+  {them:"Do you have any questions for me?", he:"יש לך שאלות אליי?"},
+  {you:"Yes. What does a typical day look like?", he:"תשאל איך נראה יום רגיל"}]},
+ {id:"d-phone", name:"קביעת תור בטלפון", place:"On the phone", turns:[
+  {them:"Good morning, Dr. Miller's office. How can I help you?", he:"בוקר טוב, משרד ד\"ר מילר. איך אפשר לעזור?"},
+  {you:"Hi, I'd like to make an appointment, please.", he:"תבקש לקבוע תור"},
+  {them:"Of course. What's the reason for your visit?", he:"כמובן. מה סיבת הביקור?"},
+  {you:"I have a bad headache.", he:"כאב ראש חזק"},
+  {them:"We have an opening on Tuesday at ten. Does that work?", he:"יש מקום ביום שלישי בעשר. מתאים?"},
+  {you:"Tuesday at ten is perfect.", he:"שלישי בעשר מושלם"},
+  {them:"Great. Can I have your name, please?", he:"מעולה. אפשר את שמך?"},
+  {you:"Sure, it's Ronen Cohen.", he:"תגיד את השם שלך"}]},
+ {id:"d-hotel", name:"צ'ק-אין במלון", place:"Hotel", turns:[
+  {them:"Welcome! Are you checking in?", he:"ברוך הבא! אתה עושה צ'ק-אין?"},
+  {you:"Yes, I have a reservation under Cohen.", he:"כן, יש הזמנה על שם כהן"},
+  {them:"Let me see... Yes, three nights. Can I see your passport?", he:"רגע... כן, שלושה לילות. אפשר דרכון?"},
+  {you:"Here you go.", he:"הנה"},
+  {them:"Thank you. Breakfast is from seven to ten.", he:"תודה. ארוחת בוקר משבע עד עשר."},
+  {you:"Great. What time is check-out?", he:"תשאל מתי הצ'ק-אאוט"},
+  {them:"Check-out is at eleven. Here is your key.", he:"צ'ק-אאוט באחת עשרה. הנה המפתח."},
+  {you:"Thank you very much.", he:"תודה רבה"}]},
+ {id:"d-store", name:"בחנות בגדים", place:"Clothing store", turns:[
+  {them:"Hi! Can I help you find anything?", he:"היי! אפשר לעזור למצוא משהו?"},
+  {you:"I'm just looking, thanks.", he:"רק מסתכל"},
+  {them:"No problem. Let me know if you need a size.", he:"אין בעיה. תגיד אם צריך מידה."},
+  {you:"Actually, do you have this in a bigger size?", he:"בעצם, יש במידה יותר גדולה?"},
+  {them:"Yes, here's a large. Would you like to try it on?", he:"כן, הנה לארג'. רוצה למדוד?"},
+  {you:"Yes, please. Where are the fitting rooms?", he:"כן, איפה תאי ההלבשה?"},
+  {them:"Right over there, on the left.", he:"שם, משמאל."},
+  {you:"Thanks. I'll take it. Can I pay by card?", he:"אקח את זה, אפשר בכרטיס?"}]}
+];
