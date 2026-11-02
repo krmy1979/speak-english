@@ -86,17 +86,23 @@ if(!SR) setTimeout(() => micFallback("הדפדפן הזה לא מזהה דיבו
 
 // כל האזנה יוצרת מזהה דיבור חדש. שימוש חוזר באותו מזהה נתקע בכרום אחרי כמה פעמים.
 let lastConfidence = 1;
+const LOG = [];
+function dlog(msg){
+  const t = new Date(); LOG.push(`${t.toTimeString().slice(0,8)} ${msg}`); if(LOG.length > 25) LOG.shift();
+  const el = document.getElementById("debugLog"); if(el) el.textContent = LOG.slice().reverse().join("\n");
+}
 function listenOnce(onInterim){
   return new Promise((resolve, reject) => {
     if(!SR){ reject("no-sr"); return; }
     if(rec && listening){ try{ rec.abort(); }catch(e){} }
-    const r = new SR(); rec = r;
+    const r = new SR(); rec = r; dlog("התחלה");
     let finals = [], interim = "", settled = false, heardAnything = false;
     const done = (ok, val) => { if(settled) return; settled = true; clearTimeout(guard); listening = false; ok ? resolve(val) : reject(val); };
     r.lang = $("voiceSel").value === "gb" ? "en-GB" : "en-US";
     r.interimResults = true; r.maxAlternatives = 4; r.continuous = false;
     r.onresult = e => {
       heardAnything = true;
+      dlog(`תוצאה: "${e.results[e.results.length-1][0].transcript}" סופי=${e.results[e.results.length-1].isFinal}`);
       let text = "";
       for(let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + " ";
       interim = text.trim();
@@ -109,11 +115,13 @@ function listenOnce(onInterim){
       }
     };
     r.onerror = e => {
+      dlog("שגיאה: " + e.error);
       // אם כבר נשמע משהו, עדיף לבדוק אותו מאשר להציג שגיאה
       if(interim && (e.error === "aborted" || e.error === "no-speech" || e.error === "network")) done(true, finals.length ? finals : [interim]);
       else done(false, e.error);
     };
     r.onend = () => {
+      dlog(`סיום. סופיים=${finals.length} ביניים="${interim}"`);
       if(finals.length) done(true, finals);
       else if(interim){ lastConfidence = 1; done(true, [interim]); }
       else done(false, heardAnything ? "no-match" : "no-speech");
@@ -121,7 +129,7 @@ function listenOnce(onInterim){
     // שומר בטיחות: אם הדפדפן לא סוגר את ההאזנה, עוצרים לבד אחרי 12 שניות
     const guard = setTimeout(() => { try{ r.stop(); }catch(e){} setTimeout(() => r.onend(), 1500); }, 12000);
     try{ if(hasTTS) speechSynthesis.cancel(); r.start(); listening = true; }
-    catch(e){ done(false, "busy"); }
+    catch(e){ dlog("start נכשל: " + e.message); done(false, "busy"); }
   });
 }
 function stopListening(){ if(rec && listening){ try{ rec.stop(); }catch(e){} } }
@@ -388,6 +396,7 @@ $("mic").onclick = async () => {
   }catch(code){ $("mic").classList.remove("on"); handleMicError(code, $("micLabel")); }
 };
 function showGrade(g){
+  dlog(`ציון ${g.pct}% · מילים לתיקון: ${g.words.filter(x=>!x.ok).length}`);
   const s = list[idx]; const r = $("result"); r.hidden = false;
   r.className = "result " + ["low", "mid", "good"][g.level];
   const unclear = g.pct === 100 && lastConfidence < 0.75;
