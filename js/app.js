@@ -91,48 +91,80 @@ function dlog(msg){
   const t = new Date(); LOG.push(`${t.toTimeString().slice(0,8)} ${msg}`); if(LOG.length > 25) LOG.shift();
   const el = document.getElementById("debugLog"); if(el) el.textContent = LOG.slice().reverse().join("\n");
 }
-function listenOnce(onInterim){
+// האזנה עמידה:
+// 1. מחכים שההקראה תיגמר לגמרי, כדי שהמיקרופון לא יקלוט את הרמקול.
+// 2. מקשיבים ברצף (continuous) ועוצרים בעצמנו אחרי שקט, כי כרום עוצר לבד מהר מדי ומפספס.
+// 3. "דבר עכשיו" מופיע רק כשהמיקרופון באמת פתוח.
+// 4. אם כרום נכשל מיד בלי לשמוע כלום (תקלה בשרת), מנסים שוב אוטומטית פעם אחת.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function quietSpeaker(){
+  if(!hasTTS) return;
+  if(speechSynthesis.speaking || speechSynthesis.pending){ speechSynthesis.cancel(); await sleep(350); }
+}
+async function listenOnce(onInterim, onReady){
+  if(!SR) throw "no-sr";
+  await quietSpeaker();
+  try{ return await listenAttempt(onInterim, onReady); }
+  catch(code){
+    if(code === "__retry"){ dlog("ניסיון חוזר אוטומטי"); await sleep(250); return await listenAttempt(onInterim, onReady, true); }
+    throw code;
+  }
+}
+function listenAttempt(onInterim, onReady, isRetry){
   return new Promise((resolve, reject) => {
-    if(!SR){ reject("no-sr"); return; }
-    if(rec && listening){ try{ rec.abort(); }catch(e){} }
-    const r = new SR(); rec = r; dlog("התחלה");
-    let finals = [], interim = "", settled = false, heardAnything = false;
-    const done = (ok, val) => { if(settled) return; settled = true; clearTimeout(guard); listening = false; ok ? resolve(val) : reject(val); };
+    if(rec){ try{ rec.onend = rec.onerror = rec.onresult = null; rec.abort(); }catch(e){} }
+    const r = new SR(); rec = r;
+    const t0 = Date.now();
+    let segs = [], interim = "", settled = false, audio = false, gotResult = false, lastErr = null;
+    let silenceT = null, startT = null, maxT = null;
+    const clearT = () => { clearTimeout(silenceT); clearTimeout(startT); clearTimeout(maxT); };
+    const stopSoon = (why) => { dlog("עוצר: " + why); try{ r.stop(); }catch(e){} setTimeout(() => finish(), 1800); };
+    const texts = () => {
+      const fin = segs.map(s => s[0]).join(" ").trim();
+      return [fin, interim].filter(Boolean).join(" ").trim();
+    };
+    const alts = () => {
+      const n = Math.max(1, ...segs.map(s => s.length));
+      const out = [];
+      for(let k = 0; k < n; k++) out.push((segs.map(s => s[k] || s[0]).join(" ") + " " + interim).trim());
+      return [...new Set(out.filter(Boolean))];
+    };
+    function finish(){
+      if(settled) return; settled = true; clearT(); listening = false;
+      const all = alts();
+      dlog(`סיום. נשמע="${texts()}" שגיאה=${lastErr || "-"} אודיו=${audio}`);
+      if(all.length) return resolve(all);
+      if(!isRetry && !gotResult && (lastErr === "network" || (Date.now() - t0 < 1500 && lastErr !== "not-allowed"))) return reject("__retry");
+      reject(lastErr && lastErr !== "aborted" && lastErr !== "no-speech" ? lastErr : (gotResult ? "no-match" : "no-speech"));
+    }
     r.lang = $("voiceSel").value === "gb" ? "en-GB" : "en-US";
-    r.interimResults = true; r.maxAlternatives = 4; r.continuous = false;
+    r.interimResults = true; r.maxAlternatives = 4; r.continuous = true;
+    r.onaudiostart = () => { audio = true; dlog("מיקרופון פתוח"); onReady && onReady(); };
     r.onresult = e => {
-      heardAnything = true;
-      dlog(`תוצאה: "${e.results[e.results.length-1][0].transcript}" סופי=${e.results[e.results.length-1].isFinal}`);
-      let text = "";
-      for(let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + " ";
-      interim = text.trim();
-      onInterim && onInterim(interim);
-      const last = e.results[e.results.length - 1];
-      if(last.isFinal){
-        const prefix = [...e.results].slice(0, -1).map(x => x[0].transcript).join(" ");
-        finals = [...last].map(a => (prefix + " " + a.transcript).trim());
-        lastConfidence = typeof last[0].confidence === "number" && last[0].confidence > 0 ? last[0].confidence : 1;
+      gotResult = true;
+      segs = []; interim = "";
+      for(let i = 0; i < e.results.length; i++){
+        const res = e.results[i];
+        if(res.isFinal){
+          segs.push([...res].map(a => a.transcript.trim()));
+          if(res[0].confidence > 0) lastConfidence = res[0].confidence;
+        } else interim += res[0].transcript + " ";
       }
+      interim = interim.trim();
+      onInterim && onInterim(texts());
+      clearTimeout(startT); clearTimeout(silenceT);
+      silenceT = setTimeout(() => stopSoon("שקט"), interim ? 2000 : 1300);
     };
-    r.onerror = e => {
-      dlog("שגיאה: " + e.error);
-      // אם כבר נשמע משהו, עדיף לבדוק אותו מאשר להציג שגיאה
-      if(interim && (e.error === "aborted" || e.error === "no-speech" || e.error === "network")) done(true, finals.length ? finals : [interim]);
-      else done(false, e.error);
-    };
-    r.onend = () => {
-      dlog(`סיום. סופיים=${finals.length} ביניים="${interim}"`);
-      if(finals.length) done(true, finals);
-      else if(interim){ lastConfidence = 1; done(true, [interim]); }
-      else done(false, heardAnything ? "no-match" : "no-speech");
-    };
-    // שומר בטיחות: אם הדפדפן לא סוגר את ההאזנה, עוצרים לבד אחרי 12 שניות
-    const guard = setTimeout(() => { try{ r.stop(); }catch(e){} setTimeout(() => r.onend(), 1500); }, 12000);
-    try{ if(hasTTS) speechSynthesis.cancel(); r.start(); listening = true; }
-    catch(e){ dlog("start נכשל: " + e.message); done(false, "busy"); }
+    r.onerror = e => { lastErr = e.error; dlog("שגיאה: " + e.error); };
+    r.onend = finish;
+    startT = setTimeout(() => stopSoon("לא התחלת לדבר"), 8000);
+    maxT = setTimeout(() => stopSoon("זמן מקסימלי"), 20000);
+    lastConfidence = 1;
+    try{ r.start(); listening = true; dlog(isRetry ? "התחלה (ניסיון 2)" : "התחלה"); }
+    catch(e){ dlog("start נכשל: " + e.message); settled = true; clearT(); reject("busy"); }
   });
 }
-function stopListening(){ if(rec && listening){ try{ rec.stop(); }catch(e){} } }
+function stopListening(){ if(rec && listening){ dlog("עצרת ידנית"); try{ rec.stop(); }catch(e){} } }
 function handleMicError(code, labelEl){
   if(code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture" || code === "no-sr") micFallback(NO_MIC_MSG);
   else if(code === "no-speech") labelEl.textContent = "לא שמעתי כלום. דבר קרוב יותר למיקרופון, ותתחיל לדבר מיד אחרי הלחיצה.";
@@ -257,9 +289,9 @@ async function practiceWord(word, row){
   if(!micOK){ await speak(cleanWord(word), 0.6); res.textContent = "תגיד אותה בקול 3 פעמים, לאט ואז מהר."; return; }
   if(listening){ stopListening(); return; }
   await speak(cleanWord(word), 0.6);
-  btn.classList.add("on"); res.className = "fix-res"; res.textContent = "מקשיב... תגיד רק את המילה";
+  btn.classList.add("on"); res.className = "fix-res"; res.textContent = "רגע...";
   try{
-    const alts = await listenOnce(t => res.textContent = t);
+    const alts = await listenOnce(t => res.textContent = t, () => res.textContent = "תגיד רק את המילה, עכשיו");
     btn.classList.remove("on");
     const hit = alts.some(a => norm(a).map(canon).includes(target));
     if(hit){ res.className = "fix-res good"; res.textContent = "מצוין! עכשיו תגיד את כל המשפט שוב."; }
@@ -313,7 +345,7 @@ let mode = "practice";
 function setMode(m){
   mode = m;
   document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
-  if(listening && rec) rec.abort();
+  if(listening && rec){ try{ rec.abort(); }catch(e){} }
   if(hasTTS) speechSynthesis.cancel();
   $("view-practice").hidden = !(m === "practice" || m === "review");
   $("view-talk").hidden = m !== "talk";
@@ -388,9 +420,9 @@ $("mic").onclick = async () => {
   userInteracted = true;
   if(!micOK){ $("selfrate").hidden = false; $("micLabel").textContent = "תגיד בקול עכשיו, ואז בחר איך הלך"; return; }
   if(listening){ stopListening(); return; }
-  $("mic").classList.add("on"); $("micLabel").textContent = "מקשיב... דבר עכשיו"; $("result").hidden = true;
+  $("mic").classList.add("on"); $("micLabel").textContent = "רגע, פותח מיקרופון..."; $("result").hidden = true; $("fixes").innerHTML = "";
   try{
-    const alts = await listenOnce(t => $("micLabel").textContent = t);
+    const alts = await listenOnce(t => $("micLabel").textContent = t, () => $("micLabel").textContent = "דבר עכשיו. כשתסיים, לחץ שוב או פשוט שתוק שנייה.");
     $("mic").classList.remove("on");
     showGrade(grade(list[idx].en, alts));
   }catch(code){ $("mic").classList.remove("on"); handleMicError(code, $("micLabel")); }
@@ -494,9 +526,9 @@ $("ytMic").onclick = async () => {
   if(!micOK){ $("ytSelf").hidden = false; return; }
   if(listening){ stopListening(); return; }
   const target = scen.turns[turnIdx].you;
-  $("ytMic").classList.add("on"); $("ytLabel").textContent = "מקשיב...";
+  $("ytMic").classList.add("on"); $("ytLabel").textContent = "רגע, פותח מיקרופון...";
   try{
-    const alts = await listenOnce(t => $("ytLabel").textContent = t);
+    const alts = await listenOnce(t => $("ytLabel").textContent = t, () => $("ytLabel").textContent = "דבר עכשיו");
     $("ytMic").classList.remove("on");
     const g = grade(target, alts); attempts++;
     if(g.pct >= 60 || attempts >= 3){
