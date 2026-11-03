@@ -156,3 +156,5 @@ h2{font-family:var(--f-display);font-weight:400;font-size:1.25rem;margin:0}
 
 .debug{font-size:.8rem;color:var(--muted)}
 .debug pre{direction:ltr;text-align:left;white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;max-height:220px;overflow:auto;margin:6px 0 0}
+
+.noise{font-size:.9rem;background:var(--bad-soft);color:var(--ink);border-radius:12px;padding:8px 12px}

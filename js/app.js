@@ -101,16 +101,17 @@ async function quietSpeaker(){
   if(!hasTTS) return;
   if(speechSynthesis.speaking || speechSynthesis.pending){ speechSynthesis.cancel(); await sleep(350); }
 }
-async function listenOnce(onInterim, onReady){
+let lastNoisy = false;
+async function listenOnce(onInterim, onReady, target){
   if(!SR) throw "no-sr";
   await quietSpeaker();
-  try{ return await listenAttempt(onInterim, onReady); }
+  try{ return await listenAttempt(onInterim, onReady, false, target); }
   catch(code){
-    if(code === "__retry"){ dlog("ניסיון חוזר אוטומטי"); await sleep(250); return await listenAttempt(onInterim, onReady, true); }
+    if(code === "__retry"){ dlog("ניסיון חוזר אוטומטי"); await sleep(250); return await listenAttempt(onInterim, onReady, true, target); }
     throw code;
   }
 }
-function listenAttempt(onInterim, onReady, isRetry){
+function listenAttempt(onInterim, onReady, isRetry, target){
   return new Promise((resolve, reject) => {
     if(rec){ try{ rec.onend = rec.onerror = rec.onresult = null; rec.abort(); }catch(e){} }
     const r = new SR(); rec = r;
@@ -153,13 +154,24 @@ function listenAttempt(onInterim, onReady, isRetry){
       interim = interim.trim();
       onInterim && onInterim(texts());
       clearTimeout(startT); clearTimeout(silenceT);
-      silenceT = setTimeout(() => stopSoon("שקט"), interim ? 2000 : 1300);
+      // עצירה חכמה: ברגע שנאמר המשפט, לא מחכים לשקט (ברקע רועש אין שקט אף פעם)
+      let wait = interim ? 2000 : 1300;
+      if(target){
+        const g = grade(target, alts());
+        const tw = norm(target).length, sw = norm(texts()).length;
+        if(sw > tw * 2 + 3) lastNoisy = true;
+        if(g.pct >= 100) wait = 350;
+        else if(g.pct >= 70) wait = 900;
+        // נאמרו הרבה יותר מילים מהמשפט: כנראה רעש רקע, לא ממשיכים לחכות
+        if(sw > tw * 3 + 4){ stopSoon("יותר מדי מילים, כנראה רעש רקע"); return; }
+      }
+      silenceT = setTimeout(() => stopSoon("שקט"), wait);
     };
     r.onerror = e => { lastErr = e.error; dlog("שגיאה: " + e.error); };
     r.onend = finish;
     startT = setTimeout(() => stopSoon("לא התחלת לדבר"), 8000);
-    maxT = setTimeout(() => stopSoon("זמן מקסימלי"), 20000);
-    lastConfidence = 1;
+    maxT = setTimeout(() => stopSoon("זמן מקסימלי"), 12000);
+    lastConfidence = 1; lastNoisy = false;
     try{ r.start(); listening = true; dlog(isRetry ? "התחלה (ניסיון 2)" : "התחלה"); }
     catch(e){ dlog("start נכשל: " + e.message); settled = true; clearT(); reject("busy"); }
   });
@@ -291,7 +303,7 @@ async function practiceWord(word, row){
   await speak(cleanWord(word), 0.6);
   btn.classList.add("on"); res.className = "fix-res"; res.textContent = "רגע...";
   try{
-    const alts = await listenOnce(t => res.textContent = t, () => res.textContent = "תגיד רק את המילה, עכשיו");
+    const alts = await listenOnce(t => res.textContent = t, () => res.textContent = "תגיד רק את המילה, עכשיו", cleanWord(word));
     btn.classList.remove("on");
     const hit = alts.some(a => norm(a).map(canon).includes(target));
     if(hit){ res.className = "fix-res good"; res.textContent = "מצוין! עכשיו תגיד את כל המשפט שוב."; }
@@ -422,11 +434,16 @@ $("mic").onclick = async () => {
   if(listening){ stopListening(); return; }
   $("mic").classList.add("on"); $("micLabel").textContent = "רגע, פותח מיקרופון..."; $("result").hidden = true; $("fixes").innerHTML = "";
   try{
-    const alts = await listenOnce(t => $("micLabel").textContent = t, () => $("micLabel").textContent = "דבר עכשיו. כשתסיים, לחץ שוב או פשוט שתוק שנייה.");
+    const alts = await listenOnce(t => $("micLabel").textContent = t, () => $("micLabel").textContent = "דבר עכשיו. כשתסיים, לחץ שוב על המיקרופון.", list[idx].en);
     $("mic").classList.remove("on");
     showGrade(grade(list[idx].en, alts));
   }catch(code){ $("mic").classList.remove("on"); handleMicError(code, $("micLabel")); }
 };
+function noiseNote(on){
+  const n = $("noiseNote"); if(!n) return;
+  n.hidden = !on;
+  if(on) n.textContent = "המיקרופון קלט גם דיבור או רעש מהרקע (טלוויזיה, אנשים מדברים), וזה מבלבל את הבדיקה. נסה בשקט, קרוב למחשב, או עם אוזניות עם מיקרופון.";
+}
 function showGrade(g){
   dlog(`ציון ${g.pct}% · מילים לתיקון: ${g.words.filter(x=>!x.ok).length}`);
   const s = list[idx]; const r = $("result"); r.hidden = false;
@@ -442,6 +459,7 @@ function showGrade(g){
   });
   const h = $("heard"); h.textContent = "שמעתי: "; const b = document.createElement("bdi"); b.textContent = g.text; h.appendChild(b);
   renderFixes($("fixes"), g.words);
+  noiseNote(lastNoisy);
   $("en").classList.remove("hidden-en");
   // בחזרה: שומרים את הציון הטוב ביותר; בתרגול רגיל: את האחרון
   const prev = store.mastery[s.en];
@@ -528,7 +546,7 @@ $("ytMic").onclick = async () => {
   const target = scen.turns[turnIdx].you;
   $("ytMic").classList.add("on"); $("ytLabel").textContent = "רגע, פותח מיקרופון...";
   try{
-    const alts = await listenOnce(t => $("ytLabel").textContent = t, () => $("ytLabel").textContent = "דבר עכשיו");
+    const alts = await listenOnce(t => $("ytLabel").textContent = t, () => $("ytLabel").textContent = "דבר עכשיו", target);
     $("ytMic").classList.remove("on");
     const g = grade(target, alts); attempts++;
     if(g.pct >= 60 || attempts >= 3){
