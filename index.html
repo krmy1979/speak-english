@@ -6,7 +6,7 @@
 <title>מדברים אנגלית</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Lexend:wght@400;500;600&family=Secular+One&display=swap">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 <div class="wrap">
@@ -216,12 +216,13 @@
   <div class="toggles">
     <label><input type="checkbox" id="challenge"> מצב אתגר: רואים רק עברית</label>
     <label><input type="checkbox" id="autoplay" checked> הקראה אוטומטית</label>
+    <label>זיהוי דיבור: <select id="engineSel"><option value="auto">אוטומטי</option><option value="local">מנוע יציב (מומלץ לאייפון)</option><option value="browser">מנוע הדפדפן (מהיר, לכרום)</option></select> <span class="hint" id="engineStat"></span></label>
     <label>קול: <select id="voiceSel"><option value="us">אמריקאי</option><option value="gb">בריטי</option></select></label>
   </div>
 
   <div class="note" id="micNote" hidden></div>
 
-  <details class="debug"><summary>פרטים טכניים (גרסה 8)</summary><pre id="debugLog">עוד לא היו האזנות.</pre></details>
+  <details class="debug"><summary>פרטים טכניים (גרסה 9)</summary><pre id="debugLog">עוד לא היו האזנות.</pre></details>
 
   <section class="coach">
     <h2>איך בונים ביטחון בדיבור</h2>
@@ -236,8 +237,9 @@
     </ol>
   </section>
 </div>
-<script src="js/data.js?v=8"></script>
-<script src="js/course.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/data.js?v=9"></script>
+<script src="js/course.js?v=9"></script>
+<script src="js/recorder.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>

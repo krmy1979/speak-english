@@ -127,7 +127,20 @@ const cleanWord = w => w.replace(/[^A-Za-z0-9'’-]/g, "");
 
 /* ---------- זיהוי דיבור ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, micOK = !!SR, listening = false;
+let rec = null, listening = false, localCtl = null, forceBrowser = false, browserFails = 0;
+const LOCAL_OK = !!(window.LocalASR && LocalASR.available);
+let micOK = !!SR || LOCAL_OK;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_SAFARI = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+// איזה מנוע זיהוי: מקומי (יציב, גם באייפון) או של הדפדפן (מהיר, בכרום)
+function engine(){
+  const pref = store.engine || "auto";
+  if(forceBrowser && SR) return "browser";
+  if(pref === "local" && LOCAL_OK) return "local";
+  if(pref === "browser" && SR) return "browser";
+  if(!SR) return LOCAL_OK ? "local" : "none";
+  return (IS_IOS || IS_SAFARI) && LOCAL_OK ? "local" : "browser";
+}
 function micFallback(msg){
   micOK = false;
   $("micNote").hidden = false; $("micNote").textContent = msg;
@@ -136,7 +149,7 @@ function micFallback(msg){
   $("ytLabel").textContent = "ענה בקול, ואז לחץ 'אמרתי'";
 }
 const NO_MIC_MSG = "המיקרופון לא זמין כאן, אז עובדים בדירוג עצמי. לציון אוטומטי פתח את index.html מתיקיית הפרויקט בכרום או באדג' ואשר גישה למיקרופון.";
-if(!SR) setTimeout(() => micFallback("הדפדפן הזה לא מזהה דיבור, אז עובדים בדירוג עצמי. לציון אוטומטי פתח את האפליקציה בכרום או באדג'."), 0);
+if(!SR && !LOCAL_OK) setTimeout(() => micFallback("הדפדפן הזה לא מזהה דיבור, אז עובדים בדירוג עצמי. לציון אוטומטי פתח את האפליקציה בכרום או באדג'."), 0);
 
 // כל האזנה יוצרת מזהה דיבור חדש. שימוש חוזר באותו מזהה נתקע בכרום אחרי כמה פעמים.
 let lastConfidence = 1;
@@ -156,7 +169,43 @@ async function quietSpeaker(){
   if(speechSynthesis.speaking || speechSynthesis.pending){ speechSynthesis.cancel(); await sleep(350); }
 }
 let lastNoisy = false;
-async function listenOnce(onInterim, onReady, target){
+function listenOnce(onInterim, onReady, target){
+  // שים לב: בלי await לפני הבחירה, כדי שהאייפון יפעיל אודיו בתוך הלחיצה
+  const p = engine() === "local" ? listenLocal(onInterim, onReady, target) : listenBrowser(onInterim, onReady, target);
+  return p.then(r => { browserFails = 0; return r; }, code => {
+    if(engine() === "browser" && (code === "no-speech" || code === "no-match")) browserFails++;
+    if(browserFails >= 2 && LOCAL_OK) suggestLocal();
+    throw code;
+  });
+}
+async function listenLocal(onInterim, onReady, target){
+  LocalASR.prime();
+  const loadP = LocalASR.load(); loadP.catch(() => {});
+  await quietSpeaker();
+  const ctl = LocalASR.record({
+    onReady: () => { dlog("מיקרופון פתוח (מנוע יציב)"); onReady && onReady(); },
+    onSpeech: () => { onInterim && onInterim("שומע אותך..."); }
+  });
+  localCtl = ctl; listening = true; dlog("התחלה (מנוע יציב)");
+  let audio;
+  try{ audio = await ctl.done; } finally { listening = false; localCtl = null; }
+  if(!audio){ dlog("לא זוהה דיבור"); throw "no-speech"; }
+  dlog(`הוקלטו ${(audio.length / 16000).toFixed(1)} שניות`);
+  if(!LocalASR.ready){
+    onInterim && onInterim(`מוריד את מנוע הזיהוי (פעם אחת בלבד)... ${LocalASR.pct}%`);
+    LocalASR.onProgress = pc => { onInterim && onInterim(`מוריד את מנוע הזיהוי (פעם אחת בלבד)... ${pc}%`); showEngine(); };
+  }
+  try{ await loadP; }catch(e){ dlog("הורדת המנוע נכשלה: " + (e && e.message || e)); throw "model"; }
+  onInterim && onInterim("מזהה מה אמרת...");
+  const text = await LocalASR.transcribe(audio);
+  dlog(`זוהה: "${text}"`);
+  lastConfidence = 1;
+  lastNoisy = !!target && norm(text).length > norm(target).length * 2 + 3;
+  if(!text) throw "no-match";
+  onInterim && onInterim(text);
+  return [text];
+}
+async function listenBrowser(onInterim, onReady, target){
   if(!SR) throw "no-sr";
   await quietSpeaker();
   try{ return await listenAttempt(onInterim, onReady, false, target); }
@@ -230,19 +279,41 @@ function listenAttempt(onInterim, onReady, isRetry, target){
     catch(e){ dlog("start נכשל: " + e.message); settled = true; clearT(); reject("busy"); }
   });
 }
-function stopListening(){ if(rec && listening){ dlog("עצרת ידנית"); try{ rec.stop(); }catch(e){} } }
+function stopListening(){
+  if(!listening) return;
+  dlog("עצרת ידנית");
+  if(localCtl){ localCtl.stop(); return; }
+  if(rec){ try{ rec.stop(); }catch(e){} }
+}
+function suggestLocal(){
+  const n = $("micNote"); n.hidden = false; n.innerHTML = "";
+  n.append("נראה שזיהוי הדיבור של הדפדפן מפספס אותך. אפשר לעבור למנוע היציב, שמקליט ישירות ומזהה עם בינה מלאכותית במכשיר שלך. ");
+  const b = document.createElement("button"); b.className = "btn sm"; b.textContent = "עבור למנוע היציב";
+  b.onclick = () => { store.engine = "local"; save(); $("engineSel").value = "local"; n.hidden = true; browserFails = 0; showEngine(); LocalASR.load().then(showEngine, showEngine); };
+  n.appendChild(b);
+}
+function showEngine(){
+  const el = $("engineStat"); if(!el) return;
+  const e = engine();
+  el.textContent = e === "local" ? (LocalASR.ready ? "מנוע יציב · מוכן" : LocalASR.pct ? `מנוע יציב · מוריד ${LocalASR.pct}%` : "מנוע יציב · ירד בשימוש הראשון (בערך 40MB)")
+    : e === "browser" ? "מנוע הדפדפן" : "אין זיהוי דיבור בדפדפן הזה";
+}
 function handleMicError(code, labelEl){
   if(code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture" || code === "no-sr") micFallback(NO_MIC_MSG);
   else if(code === "no-speech") labelEl.textContent = "לא שמעתי כלום. דבר קרוב יותר למיקרופון, ותתחיל לדבר מיד אחרי הלחיצה.";
   else if(code === "no-match") labelEl.textContent = "שמעתי קול אבל לא הצלחתי לזהות מילים. נסה שוב לאט וברור.";
   else if(code === "network") labelEl.textContent = "זיהוי הדיבור צריך חיבור לאינטרנט. בדוק חיבור ונסה שוב.";
   else if(code === "busy") labelEl.textContent = "המיקרופון עוד היה תפוס. לחץ שוב.";
+  else if(code === "model"){
+    if(SR){ forceBrowser = true; showEngine(); labelEl.textContent = "לא הצלחתי להוריד את המנוע היציב, אז עברתי למנוע של הדפדפן. לחץ שוב."; }
+    else labelEl.textContent = "לא הצלחתי להוריד את מנוע הזיהוי. בדוק חיבור לאינטרנט ולחץ שוב.";
+  }
   else labelEl.textContent = `ההאזנה נעצרה (${code}). לחץ שוב על המיקרופון.`;
 }
 
 /* ---------- ציון ---------- */
 const norm = t => t.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).filter(Boolean);
-const NUMS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10",eleven:"11",fifty:"50"};
+const NUMS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10",eleven:"11",twelve:"12",fifteen:"15",twenty:"20",thirty:"30",forty:"40",fifty:"50",sixty:"60",hundred:"100",first:"1st",second:"2nd",third:"3rd"};
 const canon = w => { w = w.replace(/'/g, ""); return NUMS[w] || w; };
 // מיישר את מה שנאמר מול המשפט, ולכל מילה שומר אם נשמעה ומה נשמע במקומה
 function align(target, said){
@@ -411,7 +482,7 @@ let mode = "course";
 function setMode(m){
   mode = m;
   document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
-  if(listening && rec){ try{ rec.abort(); }catch(e){} }
+  if(listening){ if(localCtl) localCtl.stop(); else if(rec){ try{ rec.abort(); }catch(e){} } }
   if(hasTTS) speechSynthesis.cancel();
   $("view-practice").hidden = !(m === "course" || m === "review");
   $("view-accent").hidden = m !== "accent";
@@ -904,6 +975,11 @@ $("adAgain").onclick = startAccent;
 
 /* ---------- התחלה ---------- */
 try{ const v = localStorage.getItem(KEY + "-voice"); if(v) $("voiceSel").value = v; }catch(e){}
+$("engineSel").value = store.engine || "auto";
+$("engineSel").onchange = () => { store.engine = $("engineSel").value; forceBrowser = false; browserFails = 0; save(); showEngine(); if(engine() === "local") LocalASR.load().then(showEngine, showEngine); };
+showEngine();
+// טוענים את המנוע היציב ברקע כבר בלחיצה הראשונה, כדי שלא נחכה באמצע תרגול
+document.addEventListener("pointerdown", () => { if(engine() === "local"){ LocalASR.prime(); LocalASR.load().then(showEngine, () => { forceBrowser = !!SR; showEngine(); }); showEngine(); } }, {once:true});
 $("voiceSel").onchange = () => { try{ localStorage.setItem(KEY + "-voice", $("voiceSel").value); }catch(e){} };
 document.addEventListener("pointerdown", () => { userInteracted = true; }, {once:true});
 renderStats();
