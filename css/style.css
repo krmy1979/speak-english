@@ -158,3 +158,83 @@ h2{font-family:var(--f-display);font-weight:400;font-size:1.25rem;margin:0}
 .debug pre{direction:ltr;text-align:left;white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;max-height:220px;overflow:auto;margin:6px 0 0}
 
 .noise{font-size:.9rem;background:var(--bad-soft);color:var(--ink);border-radius:12px;padding:8px 12px}
+
+/* ===== גרסה 8: מסלול, חזרה חכמה, מבטא, תעודה ===== */
+.modes{grid-template-columns:repeat(5,1fr)}
+.stack{display:flex;flex-direction:column;gap:12px}
+h3{font-family:var(--f-display);font-weight:400;font-size:1.05rem;margin:4px 0 0}
+.daily{display:flex;align-items:center;justify-content:space-between;gap:12px;border:none;cursor:pointer;text-align:start;
+  background:var(--accent);color:var(--surface);border-radius:18px;padding:16px 18px;font:inherit}
+.daily-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.daily b{font-family:var(--f-display);font-weight:400;font-size:1.3rem}
+.daily small{opacity:.88;font-size:.92rem}
+.daily-go{font-size:1.6rem;line-height:1}
+.levelhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.levelhead h2{margin:0}
+.levelhead p{margin:2px 0 0}
+.lvlprog{text-align:center}
+.lvlprog b{display:block;font:600 1.3rem var(--f-en);font-variant-numeric:tabular-nums}
+.lvlprog span{font-size:.75rem;color:var(--muted)}
+.lessons{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.lesson{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:16px;padding:12px;text-align:start;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:6px}
+.lesson:hover:not(:disabled){border-color:var(--accent)}
+.lesson:disabled{cursor:default;opacity:.55}
+.lesson .ln{font:600 .78rem var(--f-en);color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.lesson b{font-size:1.02rem;line-height:1.25}
+.lesson .lbar{height:5px;background:var(--line);border-radius:4px;overflow:hidden}
+.lesson .lbar i{display:block;height:100%;background:var(--good)}
+.lesson .ls{font-size:.8rem;color:var(--muted)}
+.lesson.done{border-color:var(--good)}
+.lesson.done .ls{color:var(--good);font-weight:600}
+.lesson.current{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.certcta{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--good-soft);border-radius:16px;padding:12px 16px}
+.unlockall{display:flex;gap:8px;align-items:center;font-size:.88rem;color:var(--muted);cursor:pointer}
+.unlockall input{accent-color:var(--accent);width:18px;height:18px}
+.lessonbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lessonbar b{font-family:var(--f-display);font-weight:400;font-size:1.15rem}
+.toast{background:var(--good-soft);border:1px solid var(--good);border-radius:14px;padding:10px 14px;font-weight:600}
+
+/* מבטא */
+.units{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.unit{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:16px;padding:12px 14px;text-align:start;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:4px}
+.unit:hover{border-color:var(--accent)}
+.unit .sym{font:500 1.5rem var(--f-en);color:var(--accent);direction:ltr;text-align:right}
+.unit b{font-size:1.05rem}
+.unit small{font-family:var(--f-en);color:var(--muted);direction:ltr;text-align:right}
+.unit .best{font-size:.8rem;color:var(--good);font-weight:600}
+.how{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px}
+.pairs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.pair{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;direction:ltr}
+.pair button{flex:1;border:none;background:var(--surface);color:var(--ink);cursor:pointer;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;font:inherit}
+.pair button+button{border-left:1px solid var(--line)}
+.pair button:hover{background:var(--accent-soft)}
+.pair .pw{font:500 1.05rem var(--f-en)}
+.pair .pm{font-size:.75rem;color:var(--muted);direction:rtl}
+.pairchoice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pairchoice .opt{text-align:center;display:flex;flex-direction:column;gap:2px;align-items:center}
+.pairchoice .opt bdi{font:500 1.4rem var(--f-en)}
+.pairchoice .opt span{font-size:.85rem;color:var(--muted);font-weight:400}
+.bigword{display:flex;flex-direction:column;align-items:center;gap:2px}
+.bigword bdi{font:600 2.4rem var(--f-en);line-height:1.1}
+.bigword span{color:var(--muted)}
+.axres{border-radius:14px;padding:10px 14px;font-weight:600;display:flex;flex-direction:column;gap:4px}
+.axres.good{background:var(--good-soft);color:var(--good)}
+.axres.bad{background:var(--bad-soft);color:var(--ink)}
+.axres .sub{font-weight:400;color:var(--ink);font-size:.92rem}
+
+/* תעודה */
+.modal{position:fixed;inset:0;z-index:20;background:color-mix(in srgb,var(--ink) 55%,transparent);display:grid;place-items:center;overflow-y:auto;
+  padding-block:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.modal-in{background:var(--bg);border-radius:22px;padding:16px;width:min(560px,100%)}
+.cert{background:#FFFDF6;color:#13302B;border:3px double #2448C9;border-radius:14px;padding:28px 20px;text-align:center;display:flex;flex-direction:column;gap:6px;
+  background-image:radial-gradient(circle at 50% 0,rgba(36,72,201,.07),transparent 60%)}
+.cert-k{font:600 .8rem var(--f-body);letter-spacing:.2em;color:#2448C9}
+.cert-t{font-family:var(--f-display);font-size:2rem;line-height:1.1}
+.cert-l{color:#5B726C}
+.cert-n{font-family:var(--f-display);font-size:1.7rem;border-bottom:1px solid #D5E0DC;padding-bottom:4px;margin-inline:auto;min-width:60%;overflow-wrap:anywhere}
+.cert-s{font-size:.9rem;color:#5B726C}
+.cert-d{font:500 .85rem var(--f-en);color:#5B726C}
+.certname{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.certname input{flex:1;min-width:0;font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+@media (max-width:420px){.mode{font-size:.78rem;padding:8px 2px}.mode svg{width:18px;height:18px}.bigword bdi{font-size:2rem}}

@@ -1,12 +1,20 @@
 // ===== מדברים אנגלית — לוגיקת האפליקציה =====
 (function(){
 const $ = id => document.getElementById(id);
-const ALL = TOPICS.flatMap(t => t.items.map(i => ({en:i[0], he:i[1], tip:i[2], topic:t.id})));
+const TOPIC_MAP = Object.fromEntries(TOPICS.map(t => [t.id, t.items]));
+const LESSONS = [];
+COURSE.forEach(L => L.lessons.forEach((ls, i) => {
+  ls.level = L.id; ls.idx = i;
+  ls.list = [...(ls.from ? TOPIC_MAP[ls.from] : []), ...(ls.items || []), ...(ls.extra || [])]
+    .map(x => ({en:x[0], he:x[1], tip:x[2], lesson:ls.id}));
+  LESSONS.push(ls);
+}));
+const ALL = LESSONS.flatMap(l => l.list);
 const DAILY_GOAL = 10;
 
 /* ---------- שמירת התקדמות ---------- */
 const KEY = "speak-en-v2";
-let store = {mastery:{}, days:{}, dialogBest:{}};
+let store = {mastery:{}, best:{}, srs:{}, days:{}, dialogBest:{}, accentBest:{}, level:"beginner", unlockAll:false, certName:""};
 try{
   const s = JSON.parse(localStorage.getItem(KEY) || "null");
   if(s) store = Object.assign(store, s);
@@ -17,25 +25,71 @@ try{
   }
 }catch(e){}
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} }
+// מעבר לגרסה 8: ציונים קודמים נכנסים לחזרה החכמה
+Object.entries(store.mastery).forEach(([en, lv]) => {
+  if(!(en in store.best)) store.best[en] = lv;
+  if(!store.srs[en]) store.srs[en] = {box: lv >= 2 ? 2 : 1, due: dayKeySafe(lv >= 2 ? 3 : 0)};
+});
+function dayKeySafe(n){ const d = new Date(); d.setDate(d.getDate() + n); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
 const dayKey = d => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0,10); };
 const today = () => dayKey(new Date());
 
 function countPractice(){ const d = today(); store.days[d] = (store.days[d] || 0) + 1; save(); renderStats(); }
-function setMastery(en, level){ store.mastery[en] = level; countPractice(); }
+/* ---------- חזרה חכמה (מרווחים) ----------
+   כל משפט נמצא ב"קופסה". הצלחה מעלה קופסה ומרחיקה את החזרה הבאה,
+   טעות מחזירה לקופסה 1. ככה משפט חוזר בדיוק לפני שנשכח. */
+const INTERVALS = [0, 1, 3, 7, 14, 30, 60];
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return dayKey(d); };
+function schedule(en, level){
+  const s = store.srs[en] || {box:0};
+  if(level === 2){ if(s.last !== today() || !s.box) s.box = Math.min((s.box || 0) + 1, INTERVALS.length - 1); }
+  else if(level === 1) s.box = Math.max(1, Math.min(s.box || 1, 2));
+  else s.box = 1;
+  s.due = level === 0 ? today() : addDays(INTERVALS[s.box]);
+  s.last = today();
+  store.srs[en] = s;
+}
+function setMastery(en, level){
+  const lessonBefore = currentLesson && lessonDone(currentLesson);
+  store.mastery[en] = level;
+  store.best[en] = Math.max(store.best[en] ?? 0, level);
+  schedule(en, level);
+  countPractice();
+  if(currentLesson && !lessonBefore && lessonDone(currentLesson)) lessonCompleted(currentLesson);
+}
+const dueList = () => ALL.filter(s => store.srs[s.en] && store.srs[s.en].due <= today());
+function nextDueText(){
+  const future = Object.values(store.srs).map(s => s.due).filter(d => d > today()).sort();
+  if(!future.length) return "";
+  const days = Math.round((new Date(future[0]) - new Date(today())) / 864e5);
+  return days === 1 ? "החזרה הבאה: מחר." : `החזרה הבאה: בעוד ${days} ימים.`;
+}
+/* ---------- שיעורים ---------- */
+let currentLesson = null;
+const lessonMastered = ls => ls.list.filter(s => store.best[s.en] === 2).length;
+const lessonNeed = ls => Math.ceil(ls.list.length * 0.7);
+const lessonDone = ls => lessonMastered(ls) >= lessonNeed(ls);
+const levelLessons = id => LESSONS.filter(l => l.level === id);
+function lessonUnlocked(ls){
+  if(store.unlockAll || ls.idx === 0) return true;
+  return lessonDone(levelLessons(ls.level)[ls.idx - 1]);
+}
+const levelDone = id => levelLessons(id).every(lessonDone);
+const nextLesson = id => levelLessons(id).find(l => lessonUnlocked(l) && !lessonDone(l));
 function streak(){
   let n = 0; const dt = new Date();
   if(!store.days[today()]) dt.setDate(dt.getDate() - 1);
   while(store.days[dayKey(dt)]){ n++; dt.setDate(dt.getDate() - 1); }
   return n;
 }
-function reviewList(){ return ALL.filter(s => s.en in store.mastery && store.mastery[s.en] < 2); }
+
 function renderStats(){
   const done = store.days[today()] || 0;
   $("goalTxt").textContent = `${Math.min(done, 99)}/${DAILY_GOAL}`;
   $("goalRing").style.strokeDashoffset = 157.1 * (1 - Math.min(done / DAILY_GOAL, 1));
   $("sStreak").textContent = streak();
-  $("sMastered").textContent = Object.values(store.mastery).filter(v => v >= 2).length;
-  const r = reviewList().length;
+  $("sMastered").textContent = Object.values(store.best).filter(v => v >= 2).length;
+  const r = dueList().length;
   $("reviewBadge").textContent = r ? r : "";
 }
 
@@ -353,53 +407,124 @@ function resetRecording(){
 }
 
 /* ---------- מצבים (טאבים) ---------- */
-let mode = "practice";
+let mode = "course";
 function setMode(m){
   mode = m;
   document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
   if(listening && rec){ try{ rec.abort(); }catch(e){} }
   if(hasTTS) speechSynthesis.cancel();
-  $("view-practice").hidden = !(m === "practice" || m === "review");
+  $("view-practice").hidden = !(m === "course" || m === "review");
+  $("view-accent").hidden = m !== "accent";
   $("view-talk").hidden = m !== "talk";
   $("view-listen").hidden = m !== "listen";
-  if(m === "practice"){ $("topics").hidden = false; selectTopic(currentTopic); }
+  $("toast").hidden = true;
+  if(m === "course") showHome();
   if(m === "review") startReview();
+  if(m === "accent") showUnits();
   if(m === "talk") showScenarios();
   if(m === "listen") startQuiz();
 }
 document.querySelectorAll(".mode").forEach(b => b.onclick = () => { userInteracted = true; setMode(b.dataset.mode); });
 
-/* ---------- משפטים ---------- */
-let list = [], idx = 0, currentTopic = "daily";
+/* ---------- מסך המסלול ---------- */
+let list = [], idx = 0;
+function showHome(){
+  currentLesson = null;
+  $("courseHome").hidden = false; $("lessonBar").hidden = true; $("practiceCard").hidden = true; $("reviewEmpty").hidden = true;
+  const lv = COURSE.find(L => L.id === store.level) || COURSE[0];
+  const chips = $("levels"); chips.innerHTML = "";
+  COURSE.forEach(L => {
+    const b = document.createElement("button"); b.className = "chip";
+    b.textContent = L.name + (levelDone(L.id) ? " ✓" : "");
+    b.setAttribute("aria-pressed", String(L.id === lv.id));
+    b.onclick = () => { store.level = L.id; save(); showHome(); };
+    chips.appendChild(b);
+  });
+  const ls = levelLessons(lv.id);
+  const mastered = ls.reduce((a, l) => a + lessonMastered(l), 0), total = ls.reduce((a, l) => a + l.list.length, 0);
+  $("levelName").textContent = "רמה: " + lv.name;
+  $("levelDesc").textContent = `${lv.desc}. ${ls.length} שיעורים, ${total} משפטים.`;
+  $("levelPct").textContent = Math.round(mastered / total * 100) + "%";
+  const cur = nextLesson(lv.id);
+  const grid = $("lessons"); grid.innerHTML = "";
+  ls.forEach(l => {
+    const open = lessonUnlocked(l), done = lessonDone(l), m = lessonMastered(l);
+    const b = document.createElement("button");
+    b.className = "lesson" + (done ? " done" : "") + (l === cur ? " current" : "");
+    b.disabled = !open;
+    b.innerHTML = `<span class="ln"><span>שיעור ${l.idx + 1}</span><span></span></span><b></b><span class="lbar"><i></i></span><span class="ls"></span>`;
+    b.querySelector(".ln span:last-child").textContent = done ? "✓" : open ? "" : "🔒";
+    b.querySelector("b").textContent = l.title;
+    b.querySelector(".lbar i").style.width = (m / l.list.length * 100) + "%";
+    b.querySelector(".ls").textContent = done ? `הושלם · ${m}/${l.list.length}` : open ? `${m}/${l.list.length} שולטים · צריך ${lessonNeed(l)}` : "ייפתח אחרי השיעור הקודם";
+    if(open) b.onclick = () => { userInteracted = true; openLesson(l); };
+    grid.appendChild(b);
+  });
+  $("certCta").hidden = !levelDone(lv.id);
+  $("unlockAll").checked = !!store.unlockAll;
+  const due = dueList().length;
+  $("dailySub").textContent = due ? `${Math.min(due, DAILY_GOAL)} חזרות שהגיע זמנן + משפטים חדשים מהשיעור שלך` : "10 משפטים חדשים מהשיעור שלך";
+}
+function openList(items, title, lesson){
+  currentLesson = lesson || null; list = items; idx = 0;
+  $("courseHome").hidden = true; $("reviewEmpty").hidden = true;
+  $("lessonBar").hidden = false; $("backHome").hidden = mode !== "course";
+  $("lessonTitle").textContent = title;
+  $("practiceCard").hidden = false; $("toast").hidden = true;
+  show();
+}
+function openLesson(l){ openList(l.list, `שיעור ${l.idx + 1}: ${l.title}`, l); }
 function dailyList(){
-  const seed = [...today()].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
-  let r = seed; const rnd = () => ((r = (r * 1103515245 + 12345) >>> 0) / 4294967296);
-  const fresh = ALL.filter(s => (store.mastery[s.en] || 0) < 2);
-  const src = (fresh.length >= DAILY_GOAL ? fresh : ALL).slice();
-  for(let i = src.length - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); [src[i], src[j]] = [src[j], src[i]]; }
-  return src.slice(0, DAILY_GOAL);
+  const due = dueList().slice(0, DAILY_GOAL);
+  const fresh = [];
+  for(const L of [store.level, ...COURSE.map(c => c.id)]){
+    for(const l of levelLessons(L)){
+      if(!lessonUnlocked(l)) continue;
+      l.list.forEach(s => { if(!(s.en in store.srs) && !fresh.includes(s) && !due.includes(s)) fresh.push(s); });
+      if(due.length + fresh.length >= DAILY_GOAL) break;
+    }
+    if(due.length + fresh.length >= DAILY_GOAL) break;
+  }
+  return [...due, ...fresh].slice(0, DAILY_GOAL);
 }
-function renderTopics(){
-  const el = $("topics"); el.innerHTML = "";
-  const mk = (id, name, cls) => {
-    const b = document.createElement("button"); b.className = "chip" + (cls ? " " + cls : ""); b.textContent = name;
-    b.setAttribute("aria-pressed", String(id === currentTopic)); b.onclick = () => { userInteracted = true; selectTopic(id); };
-    el.appendChild(b);
-  };
-  mk("daily", "10 של היום", "daily");
-  TOPICS.forEach(t => mk(t.id, t.name));
-}
-function selectTopic(id){
-  currentTopic = id; idx = 0;
-  list = id === "daily" ? dailyList() : ALL.filter(s => s.topic === id);
-  renderTopics(); $("practiceCard").hidden = false; $("reviewEmpty").hidden = true; show();
+function lessonCompleted(l){
+  const nxt = levelLessons(l.level)[l.idx + 1];
+  const t = $("toast"); t.hidden = false;
+  t.textContent = nxt ? `כל הכבוד! סיימת את "${l.title}". שיעור ${nxt.idx + 1}, "${nxt.title}", נפתח.`
+    : `כל הכבוד! סיימת את השיעור האחרון ברמה. חזור למסלול כדי לקבל תעודה.`;
 }
 function startReview(){
-  $("topics").hidden = true; idx = 0; list = reviewList();
+  currentLesson = null;
+  $("courseHome").hidden = true;
+  list = dueList(); idx = 0;
   const empty = !list.length;
+  $("lessonBar").hidden = empty; $("backHome").hidden = true;
+  $("lessonTitle").textContent = `חזרה: ${list.length} משפטים להיום`;
   $("practiceCard").hidden = empty; $("reviewEmpty").hidden = !empty;
+  $("nextDue").textContent = nextDueText();
   if(!empty) show();
 }
+$("dailyBtn").onclick = () => { userInteracted = true; const d = dailyList(); if(d.length) openList(d, "האימון של היום"); };
+$("backHome").onclick = () => { if(hasTTS) speechSynthesis.cancel(); showHome(); };
+$("unlockAll").onchange = () => { store.unlockAll = $("unlockAll").checked; save(); showHome(); };
+
+/* ---------- תעודה ---------- */
+function openCert(){
+  const lv = COURSE.find(L => L.id === store.level);
+  const ls = levelLessons(lv.id);
+  $("certLevel").textContent = `רמת ${lv.name} (${ls.length} שיעורים)`;
+  $("certStats").textContent = `${ls.reduce((a, l) => a + lessonMastered(l), 0)} משפטים בשליטה מלאה · ${streak()} ימים ברצף`;
+  $("certDate").textContent = new Date().toLocaleDateString("he-IL", {day:"numeric", month:"long", year:"numeric"});
+  $("certInput").value = store.certName || "";
+  $("certName").textContent = store.certName || "שמך כאן";
+  $("certModal").hidden = false; $("certInput").focus();
+}
+$("certOpen").onclick = openCert;
+$("certInput").oninput = () => { store.certName = $("certInput").value.trim(); $("certName").textContent = store.certName || "שמך כאן"; save(); };
+$("certClose").onclick = () => { $("certModal").hidden = true; };
+$("certModal").onclick = e => { if(e.target === $("certModal")) $("certModal").hidden = true; };
+document.addEventListener("keydown", e => { if(e.key === "Escape") $("certModal").hidden = true; });
+
 function show(){
   const s = list[idx]; const challenge = $("challenge").checked;
   $("pos").textContent = `${idx + 1} / ${list.length}`;
@@ -425,8 +550,10 @@ function show(){
   if($("autoplay").checked && !challenge && userInteracted) speak(s.en);
 }
 function showStatus(){
-  const m = store.mastery[list[idx].en];
-  $("status").textContent = m >= 2 ? "שולט" : m === 1 ? "כמעט" : m === 0 ? "לחזרה" : "";
+  const s = store.srs[list[idx].en];
+  if(!s){ $("status").textContent = "חדש"; return; }
+  const d = Math.round((new Date(s.due) - new Date(today())) / 864e5);
+  $("status").textContent = d <= 0 ? "לחזרה היום" : d === 1 ? "חוזר מחר" : `חוזר בעוד ${d} ימים`;
 }
 $("mic").onclick = async () => {
   userInteracted = true;
@@ -461,9 +588,7 @@ function showGrade(g){
   renderFixes($("fixes"), g.words);
   noiseNote(lastNoisy);
   $("en").classList.remove("hidden-en");
-  // בחזרה: שומרים את הציון הטוב ביותר; בתרגול רגיל: את האחרון
-  const prev = store.mastery[s.en];
-  setMastery(s.en, mode === "review" ? Math.max(prev || 0, g.level) : g.level);
+  setMastery(s.en, g.level);
   showStatus();
 }
 $("selfrate").addEventListener("click", e => {
@@ -478,11 +603,16 @@ $("recBtn").onclick = () => { userInteracted = true; toggleRecord(); };
 $("playMine").onclick = playMine;
 $("prev").onclick = () => { if(idx > 0){ idx--; show(); } };
 $("next").onclick = () => {
-  if(mode === "review"){ list = reviewList(); if(!list.length){ startReview(); return; } idx = idx % list.length; }
+  if(mode === "review"){
+    const cur = list[idx]; list = dueList();
+    if(!list.length){ startReview(); return; }
+    const k = list.indexOf(cur); idx = k >= 0 ? (k + 1) % list.length : idx % list.length;
+    $("lessonTitle").textContent = `חזרה: ${list.length} משפטים להיום`;
+  }
   else idx = (idx + 1) % list.length;
   show();
 };
-$("challenge").onchange = () => { if(mode === "practice" || mode === "review") show(); if(mode === "talk" && turnIdx >= 0) renderTurnTarget(); };
+$("challenge").onchange = () => { if((mode === "course" || mode === "review") && !$("practiceCard").hidden) show(); if(mode === "talk" && turnIdx >= 0) renderTurnTarget(); };
 
 /* ---------- שיחות ---------- */
 let scen = null, turnIdx = -1, scores = [], attempts = 0, talkRun = 0, talkMistakes = [];
@@ -620,10 +750,162 @@ $("qNext").onclick = () => {
 };
 $("qRestart").onclick = startQuiz;
 
+/* ---------- מבטא: זוגות מילים ---------- */
+let accU = null, axR = [], axI = 0, axRight = 0, axDone = false;
+const shuffle = a => { a = a.slice(); for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function showUnits(){
+  $("accHome").hidden = false; $("accUnit").hidden = true;
+  const el = $("units"); el.innerHTML = "";
+  ACCENT.forEach(u => {
+    const b = document.createElement("button"); b.className = "unit";
+    const best = store.accentBest[u.id];
+    b.innerHTML = `<span class="sym"></span><b></b><small></small>${best != null ? `<span class="best">שיא: ${best}%</span>` : ""}`;
+    b.querySelector(".sym").textContent = u.sound; b.querySelector("b").textContent = u.name; b.querySelector("small").textContent = u.short;
+    b.onclick = () => { userInteracted = true; openUnit(u); };
+    el.appendChild(b);
+  });
+}
+function openUnit(u){
+  accU = u;
+  $("accHome").hidden = true; $("accUnit").hidden = false;
+  $("accLearn").hidden = false; $("accEx").hidden = true; $("accDone").hidden = true;
+  $("accTitle").textContent = `${u.name} · ${u.short}`;
+  $("accExplain").textContent = u.explain;
+  const how = $("accHow"); how.innerHTML = "";
+  u.how.forEach(t => { const li = document.createElement("li"); li.textContent = t; how.appendChild(li); });
+  const pr = $("accPairs"); pr.innerHTML = "";
+  u.pairs.forEach(p => {
+    const d = document.createElement("div"); d.className = "pair";
+    [[p[0], p[2]], [p[1], p[3]]].forEach(([w, m]) => {
+      const b = document.createElement("button");
+      b.innerHTML = `<span class="pw"></span><span class="pm"></span>`;
+      b.querySelector(".pw").textContent = w; b.querySelector(".pm").textContent = m;
+      b.onclick = () => speak(w, 0.75);
+      d.appendChild(b);
+    });
+    pr.appendChild(d);
+  });
+}
+function startAccent(){
+  const listen = shuffle(accU.pairs).map(p => ({type:"listen", p, pick: Math.random() < .5 ? 0 : 1}));
+  const say = shuffle(accU.pairs).map(p => ({type:"say", p, pick: Math.random() < .5 ? 0 : 1}));
+  axR = [...listen, ...say]; axI = 0; axRight = 0;
+  $("accLearn").hidden = true; $("accDone").hidden = true; $("accEx").hidden = false;
+  showRound();
+}
+function showRound(){
+  const r = axR[axI], w = r.p[r.pick], m = r.p[r.pick + 2];
+  axDone = false;
+  $("axPos").textContent = `${axI + 1} / ${axR.length}`;
+  $("axBar").style.width = ((axI + 1) / axR.length * 100) + "%";
+  $("axScore").textContent = `${axRight} נכונות`;
+  $("axRes").hidden = true; $("axNext").disabled = true;
+  $("axNext").textContent = axI === axR.length - 1 ? "סיום" : "הבא";
+  $("axListen").hidden = r.type !== "listen"; $("axSay").hidden = r.type !== "say";
+  if(r.type === "listen"){
+    $("axQ").textContent = "איזו מילה שמעת?";
+    const c = $("axChoices"); c.innerHTML = "";
+    [0, 1].forEach(k => {
+      const b = document.createElement("button"); b.className = "opt";
+      b.innerHTML = `<bdi lang="en"></bdi><span></span>`;
+      b.querySelector("bdi").textContent = r.p[k]; b.querySelector("span").textContent = r.p[k + 2];
+      b.onclick = () => {
+        if(axDone) return; axDone = true;
+        const ok = k === r.pick; if(ok) axRight++;
+        b.classList.add(ok ? "right" : "wrong");
+        c.children[r.pick].classList.add("right");
+        axResult(ok, ok ? "נכון!" : `השמעתי "${w}" (${m}). בחרת "${r.p[k]}".`, ok ? "" : "הקשב לשתיהן אחת אחרי השנייה:");
+        if(!ok) speak(w, 0.7).then(() => sleep(300)).then(() => speak(r.p[k], 0.7));
+        $("axNext").disabled = false; countPractice();
+      };
+      c.appendChild(b);
+    });
+    if(userInteracted) speak(w, 0.85);
+  } else {
+    $("axQ").textContent = "תגיד את המילה";
+    $("axWord").textContent = w; $("axMean").textContent = m;
+    $("axSelf").hidden = micOK;
+    $("axLabel").textContent = micOK ? "לחץ ותגיד את המילה" : "תגיד בקול, ואז דרג את עצמך";
+  }
+}
+function axResult(ok, main, sub){
+  const el = $("axRes"); el.hidden = false; el.className = "axres " + (ok ? "good" : "bad");
+  el.innerHTML = `<span></span><span class="sub"></span>`;
+  el.firstChild.textContent = main; el.lastChild.textContent = sub || "";
+}
+$("axMic").onclick = async () => {
+  userInteracted = true;
+  if(!micOK){ $("axSelf").hidden = false; return; }
+  if(listening){ stopListening(); return; }
+  const r = axR[axI], w = r.p[r.pick], other = r.p[1 - r.pick], om = r.p[3 - r.pick];
+  $("axMic").classList.add("on"); $("axLabel").textContent = "רגע, פותח מיקרופון...";
+  try{
+    const alts = await listenOnce(t => $("axLabel").textContent = t, () => $("axLabel").textContent = "תגיד את המילה עכשיו", w);
+    $("axMic").classList.remove("on");
+    const words = alts.flatMap(a => norm(a));
+    const hit = words.includes(w.toLowerCase()), conf = words.includes(other.toLowerCase());
+    const first = !axDone; axDone = true;
+    if(hit && !(conf && norm(alts[0])[0] === other.toLowerCase())){
+      if(first) axRight++;
+      axResult(true, `מצוין! שמעתי "${w}".`, first ? "" : "הפעם יצא נכון. הניסיון הראשון כבר נספר.");
+    } else if(conf){
+      axResult(false, `שמעתי "${other}" (${om}) במקום "${w}".`, accU.how[0] + " לחץ על המיקרופון ונסה שוב.");
+      speak(w, 0.7);
+    } else {
+      axResult(false, `שמעתי "${norm(alts[0]).join(" ")}".`, "המילה לא זוהתה. הקשב לה, ונסה שוב לאט וברור.");
+    }
+    $("axLabel").textContent = "לחץ כדי לנסות שוב";
+    $("axNext").disabled = false; if(first) countPractice();
+  }catch(code){ $("axMic").classList.remove("on"); handleMicError(code, $("axLabel")); if(!micOK) $("axSelf").hidden = false; }
+};
+$("axSelf").addEventListener("click", e => {
+  const b = e.target.closest("[data-ok]"); if(!b || axDone) return;
+  axDone = true; const ok = b.dataset.ok === "1"; if(ok) axRight++;
+  axResult(ok, ok ? "יופי!" : "תקשיב שוב ונסה כמה פעמים לבד.", ok ? "" : accU.how[0]);
+  $("axNext").disabled = false; countPractice();
+});
+$("axPlay").onclick = () => { const r = axR[axI]; speak(r.p[r.pick], 0.85); };
+$("axSlow").onclick = () => { const r = axR[axI]; speak(r.p[r.pick], 0.55); };
+$("axHear").onclick = () => { const r = axR[axI]; speak(r.p[r.pick], 0.7); };
+$("axNext").onclick = () => { if(axI < axR.length - 1){ axI++; showRound(); } else accentDone(); };
+function accentDone(){
+  const pct = Math.round(axRight / axR.length * 100);
+  store.accentBest[accU.id] = Math.max(store.accentBest[accU.id] || 0, pct); save();
+  $("accEx").hidden = true; $("accDone").hidden = false;
+  $("adScore").textContent = `${axRight} / ${axR.length}`;
+  $("adMsg").textContent = pct >= 85 ? "מעולה! האוזן והפה שלך כבר מבדילים בין הצלילים." : pct >= 60 ? "יפה. עוד סבב אחד ותרגיש את ההבדל." : "זה צליל קשה לכל דובר עברית. חזור על ההסבר ונסה שוב.";
+  $("twEn").textContent = accU.twister[0]; $("twHe").textContent = accU.twister[1];
+  $("twWords").innerHTML = ""; $("twLabel").textContent = micOK ? "לחץ ותגיד את כל המשפט" : "תגיד את המשפט בקול 3 פעמים, כל פעם קצת יותר מהר.";
+}
+$("twHear").onclick = () => speak(accU.twister[0]);
+$("twSlow").onclick = () => speak(accU.twister[0], 0.6);
+$("twMic").onclick = async () => {
+  if(!micOK) return;
+  if(listening){ stopListening(); return; }
+  const t = accU.twister[0];
+  $("twMic").classList.add("on"); $("twLabel").textContent = "רגע, פותח מיקרופון...";
+  try{
+    const alts = await listenOnce(x => $("twLabel").textContent = x, () => $("twLabel").textContent = "דבר עכשיו", t);
+    $("twMic").classList.remove("on");
+    const g = grade(t, alts);
+    $("twLabel").textContent = g.pct >= 85 ? `${g.pct}% · מצוין!` : `${g.pct}% · לחץ על מילה אדומה כדי לשמוע אותה`;
+    const w = $("twWords"); w.innerHTML = "";
+    t.split(/\s+/).forEach((word, k) => {
+      const sp = document.createElement("span"); sp.textContent = word; sp.className = g.ok[k] ? "ok" : "miss";
+      if(!g.ok[k]) sp.onclick = () => speak(cleanWord(word), 0.7);
+      w.appendChild(sp);
+    });
+    countPractice();
+  }catch(code){ $("twMic").classList.remove("on"); handleMicError(code, $("twLabel")); }
+};
+$("accStart").onclick = () => { userInteracted = true; startAccent(); };
+$("accBack").onclick = $("adOther").onclick = () => { if(hasTTS) speechSynthesis.cancel(); showUnits(); };
+$("adAgain").onclick = startAccent;
+
 /* ---------- התחלה ---------- */
 try{ const v = localStorage.getItem(KEY + "-voice"); if(v) $("voiceSel").value = v; }catch(e){}
 $("voiceSel").onchange = () => { try{ localStorage.setItem(KEY + "-voice", $("voiceSel").value); }catch(e){} };
 document.addEventListener("pointerdown", () => { userInteracted = true; }, {once:true});
 renderStats();
-selectTopic("daily");
+setMode("course");
 })();
