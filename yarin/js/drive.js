@@ -80,10 +80,59 @@ function biomeAt(x) {
   const t = idx === 0 ? 1 : Math.min(1, (x - idx * SEG) / TRANS);
   return { cur, prev, t, idx };
 }
+// ---------- הפתעות בדרך: גשרים, מנהרות, רכבות, מעברי חציה ----------
+const FEATURES = {
+  city:   [['cross', 900], ['cross', 2300]],
+  farm:   [['train', 1000], ['cross', 1800], ['bridge', 2400]],
+  forest: [['tunnel', 900], ['cross', 2100], ['bridge', 2500]],
+  beach:  [['bridge', 1000], ['cross', 2300]],
+  desert: [['tunnel', 1000], ['cross', 2100], ['train', 2600]],
+  snow:   [['tunnel', 900], ['cross', 2000], ['bridge', 2400]]
+};
+const FLEN = { bridge: 520, tunnel: 700, train: 0, cross: 0 };
+const CROSS = {
+  city:   { w: ['🧒', '👧', '👩'], say: 'מעבר חציה! ילדים חוצים את הכביש. עוצרים ומחכים', zebra: true },
+  farm:   { w: ['🐄', '🐄'], say: 'פרות חוצות את הכביש! עוצרים ומחכים' },
+  forest: { w: ['🦌', '🦌'], say: 'איילים חוצים את הכביש! עוצרים' },
+  beach:  { w: ['🦆', '🐥', '🐥', '🐥'], say: 'משפחת ברווזים חוצה את הכביש! עוצרים ומחכים', zebra: true },
+  desert: { w: ['🐪', '🐪'], say: 'גמלים חוצים את הכביש! עוצרים' },
+  snow:   { w: ['🐧', '🐧', '🐧'], say: 'פינגווינים חוצים את הכביש! עוצרים ומחכים' }
+};
+const FEAT_DEFS = new Map();
+function featureDefs(seg) {
+  if (seg < 0) return [];
+  if (!FEAT_DEFS.has(seg)) {
+    const bio = BIOMES[seg % BIOMES.length];
+    FEAT_DEFS.set(seg, FEATURES[bio.id]
+      .map(([type, off], i) => ({ id: `${seg}-${i}`, type, bio: bio.id, x0: seg * SEG + off, x1: seg * SEG + off + FLEN[type] }))
+      .filter(f => f.x0 >= 1400));
+  }
+  return FEAT_DEFS.get(seg);
+}
+function featuresIn(a, b) {
+  const out = [];
+  for (let s = Math.floor(a / SEG) - 1; s <= Math.floor(b / SEG); s++)
+    for (const f of featureDefs(s)) if (f.x1 + 300 > a && f.x0 - 300 < b) out.push(f);
+  return out;
+}
+function flatAt(x) {
+  let f = 0;
+  const seg = Math.floor(x / SEG);
+  for (let s = seg - 1; s <= seg + 1; s++) for (const d of featureDefs(s)) {
+    if (d.type === 'cross') continue;
+    const m = 240, a = d.x0 - 90, b = d.x1 + 90;
+    let k = 0;
+    if (x >= a && x <= b) k = 1;
+    else if (x > a - m && x < a) k = (x - (a - m)) / m;
+    else if (x > b && x < b + m) k = 1 - (x - b) / m;
+    if (k > 0) f = Math.max(f, k * k * (3 - 2 * k));
+  }
+  return f;
+}
 function terrain(x) {
   const b = biomeAt(x);
   const amp = lerp(b.prev.amp, b.cur.amp, b.t);
-  return amp * (0.6 * Math.sin(x / 260) + 0.4 * Math.sin(x / 117 + 1.3));
+  return amp * (0.6 * Math.sin(x / 260) + 0.4 * Math.sin(x / 117 + 1.3)) * (1 - flatAt(x));
 }
 
 // =========================================================
@@ -101,12 +150,16 @@ function stationDrive() {
       </div>
       <div class="drive-hint hidden" id="dhint"></div>
       <div class="ctrl ctrl-right">
-        <button class="pedal brake" id="brake"><b>✋</b><small>עצור</small></button>
+        <div class="pedal-col">
+          <button class="pedal rev" id="rev"><b>◀</b><small>אחורה</small></button>
+          <button class="pedal brake" id="brake"><b>✋</b><small>עצור</small></button>
+        </div>
         <button class="pedal gas" id="gas"><b>▲</b><small>סע</small></button>
       </div>
       <div class="ctrl ctrl-left">
         <button class="round-btn" id="horn">📯</button>
         <button class="round-btn special hidden" id="special">💦</button>
+        <button class="round-btn lights hidden" id="lights">💡</button>
       </div>
       <div class="picker hidden" id="picker"></div>
     </div>`, 'screen-drive');
@@ -120,6 +173,7 @@ function stationDrive() {
   const fuelFill = document.getElementById('fuelFill');
   const specialBtn = document.getElementById('special');
   const hornBtn = document.getElementById('horn');
+  const lightsBtn = document.getElementById('lights');
 
   let W = 0, H = 0, S = 1, DPR = 1, roadBase = 0, R = 0;
   const g = {
@@ -127,8 +181,10 @@ function stationDrive() {
     fuel: 1, gas: false, brake: false,
     chunks: new Map(), dyn: [], task: null, lastTaskX: 900,
     cargo: [], busy: false, siren: false, lastBiome: -1, tripStars: 0,
-    particles: [], flakes: [], hits: [], warnedFuel: false, emptySaid: false, time: 0
+    particles: [], flakes: [], hits: [], warnedFuel: false, emptySaid: false, time: 0,
+    rev: false, lights: false, fstate: new Map(), beepT: 0, dark: 0
   };
+  const fs = f => { if (!g.fstate.has(f.id)) g.fstate.set(f.id, { state: 'idle', t: 0 }); return g.fstate.get(f.id); };
 
   // ---------- גודל מסך ----------
   function resize() {
@@ -184,7 +240,14 @@ function stationDrive() {
     const bio = b.t < 0.5 ? b.prev : b.cur;
     const r1 = hash(ci), r2 = hash(ci + 0.37), r3 = hash(ci + 0.71), r4 = hash(ci + 0.13);
     if (x0 < 900) return items;   // התחלה נקייה
-    if (bio.id === 'city' && ci % 6 === 3 && b.t === 1) {
+    const near = featuresIn(x0, x0 + CHUNK);
+    const inside = near.some(f => (f.type === 'tunnel' || f.type === 'bridge') && x0 + CHUNK > f.x0 - 40 && x0 < f.x1 + 40);
+    const closeToFeat = near.some(f => Math.abs(f.x0 - (x0 + 90)) < 380);
+    if (inside) {
+      for (let i = 0; i < 3; i++) items.push({ kind: 'star', x: x0 + 40 + i * 50, high: false });
+      return items;
+    }
+    if (bio.id === 'city' && ci % 6 === 3 && b.t === 1 && !closeToFeat) {
       items.push({ kind: 'light', x: x0 + 90, state: 'idle' });
       return items;
     }
@@ -200,17 +263,17 @@ function stationDrive() {
     if (r3 < 0.42) {
       const n = 1 + Math.floor(r1 * 3);
       for (let i = 0; i < n; i++) items.push({ kind: 'star', x: x0 + 40 + i * 42, high: r4 > 0.75 });
-    } else if (r3 > 0.9 && bio.id !== 'city') {
+    } else if (r3 > 0.9 && bio.id !== 'city' && !closeToFeat) {
       items.push({ kind: 'ramp', x: x0 + 60 });
       items.push({ kind: 'star', x: x0 + 150, high: true });
       items.push({ kind: 'star', x: x0 + 195, high: true });
     }
-    if (g.type === 'sport' && r2 > 0.8 && bio.id !== 'city') items.push({ kind: 'ramp', x: x0 + 120 });
+    if (g.type === 'sport' && r2 > 0.8 && bio.id !== 'city' && !closeToFeat) items.push({ kind: 'ramp', x: x0 + 120 });
     return items;
   }
   function visibleItems() {
     const c0 = Math.floor((g.cam - 150) / CHUNK), c1 = Math.floor((g.cam + visW() + 250) / CHUNK);
-    for (const k of g.chunks.keys()) if (k < c0 - 2) g.chunks.delete(k);
+    for (const k of g.chunks.keys()) if (k < c0 - 40 || k > c1 + 40) g.chunks.delete(k);
     const out = [];
     for (let c = c0; c <= c1; c++) {
       if (!g.chunks.has(c)) g.chunks.set(c, makeChunk(c));
@@ -236,7 +299,7 @@ function stationDrive() {
   }
 
   function nearStopped(x, range = 130) {
-    return Math.abs(x - vehX()) < range && g.v < 30 && g.air === 0;
+    return Math.abs(x - vehX()) < range && Math.abs(g.v) < 30 && g.air === 0;
   }
 
   function celebrate(msg) {
@@ -386,12 +449,230 @@ function stationDrive() {
       Sound.say('רמזור אדום! צריך לעצור'); hint('🚦 רמזור אדום – עוצרים!');
     }
     if (it.state === 'red') {
-      if (g.v < 12 && d > -10 && d < 300) {
+      if (Math.abs(g.v) < 12 && d > -10 && d < 300) {
         it.wait = (it.wait || 0) + dt;
         if (it.wait > 1.6) { it.state = 'green'; Sound.say('יופי שעצרת! ירוק, נוסעים!'); hint('🟢 ירוק – נוסעים!'); state.stars++; save(); updateStars(); Sound.play('star'); }
       } else if (d < -5) {
         it.state = 'green'; Sound.play('oops'); Sound.say('אופס, עברנו באדום! בפעם הבאה עוצרים');
       }
+    }
+  }
+
+  // ---------- גשרים, מנהרות, רכבות, מעברי חציה ----------
+  function block(bx, prevFront) {
+    const front = vehX() + 75;
+    if (front > bx && prevFront <= bx + 3) {
+      g.cam -= front - bx;
+      if (g.v > 70) Sound.play('bump');
+      g.v = Math.min(g.v, 0);
+    }
+  }
+  function updateFeatures(dt, prevFront) {
+    const list = featuresIn(g.cam - 200, g.cam + visW() + 200);
+    const vx = vehX(), front = vx + 75;
+    let dark = 0, nearTunnel = false;
+    for (const f of list) {
+      const st = fs(f);
+      if (f.type === 'train') {
+        const d = f.x0 - 100 - front;
+        if (st.state === 'idle' && d < 420 && d > -20) {
+          st.state = 'closing'; st.t = 0;
+          Sound.say('רכבת מגיעה! המחסום יורד. עוצרים ומחכים'); hint('🚂 רכבת מגיעה – עוצרים ליד המחסום!');
+        }
+        if (st.state === 'closing' || st.state === 'train' || st.state === 'opening') {
+          st.t += dt;
+          st.bell = (st.bell || 0) - dt;
+          if (st.bell <= 0 && st.state !== 'opening') { Sound.play('bell'); st.bell = 0.6; }
+          if (st.state === 'closing' && st.t > 1.6) { st.state = 'train'; st.t = 0; Sound.play('train'); }
+          else if (st.state === 'train' && st.t > 4.6) { st.state = 'opening'; st.t = 0; }
+          else if (st.state === 'opening' && st.t > 0.9) {
+            st.state = 'done';
+            Sound.say('הרכבת עברה! המחסום עלה, אפשר לנסוע'); hint('✅ אפשר לנסוע!');
+            state.stars++; save(); updateStars(); Sound.play('star');
+          }
+          if (st.state === 'closing' || st.state === 'train') block(f.x0 - 100, prevFront);
+        }
+      } else if (f.type === 'cross') {
+        const c = CROSS[f.bio];
+        const d = f.x0 - 30 - front;
+        if (st.state === 'idle' && d < 380 && d > -10) {
+          st.state = 'crossing'; st.t = 0;
+          Sound.say(c.say); hint('✋ ' + c.say.split('!')[0] + '!');
+        }
+        if (st.state === 'crossing') {
+          st.t += dt;
+          block(f.x0 - 30, prevFront);
+          if (st.t > 0.8 + c.w.length * 0.6 + 3.2) {
+            st.state = 'done';
+            Sound.say('תודה שעצרת! עכשיו נוסעים'); state.stars++; save(); updateStars(); Sound.play('star');
+          }
+        }
+      } else if (f.type === 'tunnel') {
+        if (f.x0 - vx < 650 && vx < f.x1 + 150) nearTunnel = true;
+        if (vx > f.x0 && vx < f.x1) {
+          dark = Math.max(dark, Math.min(1, (vx - f.x0) / 140, (f.x1 - vx) / 140));
+          if (!st.said) {
+            st.said = true;
+            Sound.say(g.lights ? 'מנהרה! איזה חושך. טוב שהפנסים דולקים' : 'מנהרה! חושך! לחץ על כפתור הפנסים');
+            if (!g.lights) { hint('💡 לחץ על הפנסים'); lightsBtn.classList.add('pulse'); }
+          }
+        } else if (f.x0 - vx < 600 && f.x0 - vx > 0 && !st.pre) {
+          st.pre = true; Sound.say('הנה מנהרה! נכנסים להר');
+        }
+      } else if (f.type === 'bridge') {
+        if (vx > f.x0 + 60 && vx < f.x1 && !st.said) {
+          st.said = true;
+          Sound.say(f.bio === 'beach' ? 'גשר מעל המים! תראה, דגים קופצים' : 'גשר! מתחתינו זורם נהר עם דגים');
+        }
+      }
+    }
+    g.dark = dark;
+    lightsBtn.classList.toggle('hidden', !nearTunnel && !g.lights);
+    if (g.lights) lightsBtn.classList.remove('pulse');
+  }
+
+  function drawFeatBack(f) {
+    const x0 = sx(f.x0), x1 = sx(f.x1), rb = roadBase;
+    if (x1 < -400 || x0 > W + 400) return;
+    if (f.type === 'bridge') {
+      ctx.fillStyle = '#4FC3F7';
+      ctx.fillRect(x0 - 30 * S, rb - 26 * S, x1 - x0 + 60 * S, 26 * S + R);
+      ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2 * S;
+      for (let k = 0; k < 2; k++) {
+        ctx.beginPath();
+        for (let x = x0 - 30 * S; x <= x1 + 30 * S; x += 8) {
+          const y = rb - 18 * S + k * 9 * S + Math.sin((x / S + g.time * 50) / 12) * 2 * S;
+          x <= x0 - 30 * S ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    } else if (f.type === 'tunnel') {
+      const rock = f.bio === 'desert' ? '#C68B59' : f.bio === 'snow' ? '#90A4AE' : '#795548';
+      const mt = (k) => {
+        ctx.beginPath(); ctx.moveTo(x0 - 120 * S * k, rb);
+        ctx.quadraticCurveTo(x0 - 40 * S, rb - 210 * S * k, x0 + (x1 - x0) * 0.3, rb - 220 * S * k);
+        ctx.quadraticCurveTo((x0 + x1) / 2, rb - 275 * S * k, x0 + (x1 - x0) * 0.7, rb - 225 * S * k);
+        ctx.quadraticCurveTo(x1 + 40 * S, rb - 210 * S * k, x1 + 120 * S * k, rb);
+        ctx.closePath();
+      };
+      ctx.fillStyle = rock; mt(1); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.12)';
+      for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.arc(x0 + (x1 - x0) * hash(i + f.x0) , rb - (140 + hash(i * 3 + f.x0) * 80) * S, (8 + hash(i) * 10) * S, 0, 7); ctx.fill(); }
+      if (f.bio === 'snow') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath(); ctx.ellipse((x0 + x1) / 2, rb - 240 * S, (x1 - x0) * 0.32, 30 * S, 0, 0, 7); ctx.fill();
+      } else if (f.bio === 'forest') {
+        for (let i = 0; i < 6; i++) emoji('🌲', x0 + (x1 - x0) * (0.1 + i * 0.16), rb - (205 + Math.sin(i * 1.7) * 18) * S, 34 * S);
+      }
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(x0, rb - 120 * S, x1 - x0, 120 * S + 2);
+      for (let d = f.x0 + 45; d < f.x1; d += 90) {
+        ctx.fillStyle = '#FFCC80'; ctx.beginPath(); ctx.arc(sx(d), rb - 102 * S, 5 * S, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = '#6D4C41';
+      for (const px of [x0, x1]) ctx.fillRect(px - 12 * S, rb - 132 * S, 24 * S, 132 * S);
+      ctx.fillRect(x0 - 12 * S, rb - 134 * S, 24 * S + (x1 - x0), 14 * S);
+      ctx.fillStyle = '#FFD23F'; ctx.font = `bold ${13 * S}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('מנהרה', x0 + 50 * S, rb - 127 * S);
+    } else if (f.type === 'cross') {
+      // שלט אזהרה
+      const c = CROSS[f.bio], x = sx(f.x0 - 110);
+      ctx.fillStyle = '#90A4AE'; ctx.fillRect(x - 2.5 * S, rb - 70 * S, 5 * S, 70 * S);
+      ctx.save(); ctx.translate(x, rb - 82 * S); ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#FFD23F'; ctx.fillRect(-16 * S, -16 * S, 32 * S, 32 * S);
+      ctx.strokeStyle = '#212121'; ctx.lineWidth = 2.5 * S; ctx.strokeRect(-16 * S, -16 * S, 32 * S, 32 * S);
+      ctx.restore();
+      emoji(c.w[0], x, rb - 70 * S, 22 * S);
+    }
+  }
+
+  function drawFeatFront(f) {
+    const x0 = sx(f.x0), x1 = sx(f.x1), rb = roadBase;
+    if (x1 < -400 || x0 > W + 400) return;
+    const st = fs(f);
+    if (f.type === 'bridge') {
+      const wy = rb + R;
+      ctx.fillStyle = '#29B6F6'; ctx.fillRect(x0 - 30 * S, wy, x1 - x0 + 60 * S, H - wy);
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2 * S;
+      for (let k = 1; k < 4; k++) {
+        ctx.beginPath();
+        for (let x = x0 - 30 * S; x <= x1 + 30 * S; x += 8) {
+          const y = wy + k * 22 * S + Math.sin((x / S - g.time * 40 + k * 20) / 14) * 2.5 * S;
+          x <= x0 - 30 * S ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#90A4AE';
+      for (let d = f.x0 + 60; d < f.x1 - 20; d += 140) ctx.fillRect(sx(d) - 10 * S, wy, 20 * S, H - wy);
+      ctx.fillStyle = '#78909C'; ctx.fillRect(x0 - 20 * S, wy - 2, x1 - x0 + 40 * S, 10 * S);
+      // דגים קופצים
+      for (let i = 0; i < 3; i++) {
+        const ph = (g.time * 0.45 + i * 0.37) % 1;
+        if (ph < 0.5) {
+          const q = ph / 0.5, fx = f.x0 + (i + 1) * (f.x1 - f.x0) / 4 + q * 40;
+          const fy = wy + (H - wy) * 0.55 - Math.sin(q * Math.PI) * 60 * S;
+          emoji(i === 1 ? '🐠' : '🐟', sx(fx), fy, 28 * S);
+        }
+      }
+      // מעקות
+      ctx.strokeStyle = '#ECEFF1'; ctx.lineWidth = 3 * S;
+      for (const [yb, h] of [[rb, 22], [rb + R, 18]]) {
+        ctx.beginPath(); ctx.moveTo(x0 - 20 * S, yb - h * S); ctx.lineTo(x1 + 20 * S, yb - h * S); ctx.stroke();
+        for (let d = f.x0 - 20; d <= f.x1 + 20; d += 32) { ctx.beginPath(); ctx.moveTo(sx(d), yb); ctx.lineTo(sx(d), yb - h * S); ctx.stroke(); }
+      }
+    } else if (f.type === 'train') {
+      const x = x0, top = rb - 70 * S;
+      ctx.fillStyle = '#A1887F';
+      ctx.beginPath(); ctx.moveTo(x - 14 * S, top); ctx.lineTo(x + 14 * S, top); ctx.lineTo(x + 60 * S, H); ctx.lineTo(x - 60 * S, H); ctx.fill();
+      ctx.strokeStyle = '#5D4037';
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 12, y = lerp(top, H, t), w = lerp(12, 52, t) * S;
+        ctx.lineWidth = lerp(2, 6, t) * S; ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x + w, y); ctx.stroke();
+      }
+      ctx.strokeStyle = '#CFD8DC'; ctx.lineWidth = 3 * S;
+      ctx.beginPath(); ctx.moveTo(x - 7 * S, top); ctx.lineTo(x - 30 * S, H); ctx.moveTo(x + 7 * S, top); ctx.lineTo(x + 30 * S, H); ctx.stroke();
+      // מחסום
+      const gx = sx(f.x0 - 92), gy = rb;
+      ctx.fillStyle = '#ECEFF1'; ctx.fillRect(gx - 4 * S, gy - 92 * S, 8 * S, 92 * S);
+      const active = st.state === 'closing' || st.state === 'train' || st.state === 'opening';
+      const blink = active ? Math.floor(g.time * 4) % 2 : -1;
+      [[-10, 0], [10, 1]].forEach(([dx, i]) => {
+        ctx.fillStyle = '#212121'; ctx.beginPath(); ctx.arc(gx + dx * S, gy - 80 * S, 8 * S, 0, 7); ctx.fill();
+        ctx.fillStyle = blink === i ? '#FF1744' : '#5D1A1A'; ctx.beginPath(); ctx.arc(gx + dx * S, gy - 80 * S, 6 * S, 0, 7); ctx.fill();
+      });
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${16 * S}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('✕', gx, gy - 100 * S);
+      const k = st.state === 'closing' ? Math.min(1, st.t / 1.2) : st.state === 'train' ? 1 : st.state === 'opening' ? 1 - Math.min(1, st.t / 0.8) : 0;
+      ctx.save(); ctx.translate(gx, gy - 58 * S); ctx.rotate(lerp(-Math.PI / 2, 0, k));
+      for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#fff' : '#E53935'; ctx.fillRect(i * 13 * S, -3.5 * S, 13 * S, 7 * S); }
+      ctx.restore();
+      // הרכבת
+      if (st.state === 'train') {
+        const cars = ['🚂', '🚃', '🚃', '🚃', '🚃'];
+        for (let i = cars.length - 1; i >= 0; i--) {
+          const p = (st.t - i * 0.55) / 1.9;
+          if (p <= 0 || p >= 1) continue;
+          const y = lerp(top + 10 * S, H + 110 * S, p), size = lerp(24, 180, p) * S;
+          emoji(cars[i], x, y, size);
+          if (i === 0 && Math.random() < 0.5) g.particles.push({ x: f.x0 + (Math.random() - .5) * 20, y: y - size * 0.9, vx: 0, vy: -50, life: 1, c: 'rgba(230,230,230,.7)', r: 6 + p * 10 });
+        }
+      }
+    } else if (f.type === 'cross') {
+      const c = CROSS[f.bio];
+      if (c.zebra) {
+        ctx.fillStyle = '#FFFFFF';
+        for (let k = 0; k < 4; k++) ctx.fillRect(x0 - 28 * S, rb + R * (0.08 + k * 0.23), 56 * S, R * 0.13);
+      }
+      const n = c.w.length;
+      c.w.forEach((e, i) => {
+        let p = 0;
+        if (st.state === 'crossing') p = Math.max(0, Math.min(1, (st.t - 0.8 - i * 0.6) / 3.0));
+        if (st.state === 'done') p = 1;
+        const walking = p > 0 && p < 1;
+        const y = lerp(rb + 2 * S, rb + R + 36 * S, p) - (walking ? Math.abs(Math.sin(g.time * 10 + i)) * 4 * S : 0);
+        const xx = x0 + (i - (n - 1) / 2) * 18 * S;
+        emoji(e, xx, y, lerp(34, 46, p) * S);
+      });
     }
   }
 
@@ -407,15 +688,21 @@ function stationDrive() {
 
   function update(dt) {
     const max = MAX_SPEED[g.type] * (g.fuel <= 0 ? 0.35 : 1);
-    if (g.brake) g.v = Math.max(0, g.v - 520 * dt);
-    else if (g.gas) g.v = Math.min(max, g.v + max * 0.85 * dt);
-    else g.v = Math.max(0, g.v - 95 * dt);
-    if (g.v > max) g.v = Math.max(max, g.v - 300 * dt);
+    let target = 0, acc = 95;
+    if (g.brake) { target = 0; acc = 520; }
+    else if (g.gas) { target = max; acc = g.v < 0 ? 520 : max * 0.85; }
+    else if (g.rev) { target = -max * 0.45; acc = g.v > 0 ? 520 : max * 0.6; }
+    if (g.v < target) g.v = Math.min(target, g.v + acc * dt);
+    else g.v = Math.max(target, g.v - acc * dt);
 
     const prevX = vehX();
     g.cam += g.v * dt;
+    if (g.cam < 300) { g.cam = 300; g.v = Math.max(0, g.v); }
+    updateFeatures(dt, prevX + 75);
     const vx = vehX();
-    g.fuel = Math.max(0, g.fuel - g.v * dt / 7500);
+    g.fuel = Math.max(0, g.fuel - Math.abs(g.v) * dt / 7500);
+    // צפצוף של נסיעה לאחור
+    if (g.v < -5) { g.beepT -= dt; if (g.beepT <= 0) { Sound.play('beep'); g.beepT = 0.55; } } else g.beepT = 0;
 
     // קפיצה
     if (g.air > 0 || g.vy > 0) {
@@ -471,12 +758,12 @@ function stationDrive() {
     for (const p of g.particles) { p.life -= dt; p.x += p.vx * dt / S; p.y += p.vy * dt; }
     g.particles = g.particles.filter(p => p.life > 0);
     // עשן מהאגזוז
-    if (g.gas && g.v > 10 && Math.random() < 0.3) {
+    if ((g.gas || g.rev) && Math.abs(g.v) > 10 && Math.random() < 0.3) {
       g.particles.push({ x: vx - 80, y: roadTop(vx) - 18 * S - g.air * S, vx: -40, vy: -25, life: 0.7, c: 'rgba(200,200,200,.6)', r: 6 });
     }
 
     // מנוע + דלק בתצוגה
-    Sound.engine(g.v / MAX_SPEED.sport);
+    Sound.engine(Math.abs(g.v) / MAX_SPEED.sport);
     fuelFill.style.width = (g.fuel * 100) + '%';
     fuelFill.style.background = g.fuel < 0.25 ? '#E53935' : g.fuel < 0.5 ? '#FDD835' : '#43A047';
   }
@@ -616,6 +903,9 @@ function stationDrive() {
     }
     ctx.lineTo(W, H); ctx.fill();
 
+    const feats = featuresIn(g.cam - 300, g.cam + visW() + 300);
+    for (const f of feats) drawFeatBack(f);
+
     // עצמים מאחורי הכביש
     g.hits = [];
     const items = visibleItems().concat(g.dyn);
@@ -689,6 +979,8 @@ function stationDrive() {
     for (let x = 0; x <= W + 8; x += 8) ctx.lineTo(x, roadTop(g.cam + x / S) + R);
     ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
 
+    for (const f of feats) drawFeatFront(f);
+
     // עצמים על הכביש
     for (const it of items) {
       const x = sx(it.x);
@@ -738,12 +1030,35 @@ function stationDrive() {
     if (ramp && g.air === 0) { rampLift = ((vx + 40 - ramp.x) / 70) * 26; ang -= 0.32; }
     if (g.air > 0) ang = lerp(g.tilt, -0.12 + (g.vy < 0 ? 0.18 : 0), 0.1);
     g.tilt = ang;
-    const shake = g.v > 5 && g.air === 0 ? Math.sin(g.time * 30) * 0.8 * (g.v / 200) : 0;
+    const shake = Math.abs(g.v) > 5 && g.air === 0 ? Math.sin(g.time * 30) * 0.8 * (Math.abs(g.v) / 200) : 0;
     const top = yRoad - vh * (117 / 126) - (g.air + rampLift) * S + shake;
     vehEl.style.transform = `translate(${W * 0.28 - vw / 2}px, ${top}px) rotate(${ang}rad)`;
-    vehEl.classList.toggle('driving', g.v > 4);
-    vehEl.style.setProperty('--spin', Math.max(0.12, 1.2 - g.v / 220) + 's');
+    vehEl.classList.toggle('driving', Math.abs(g.v) > 4);
+    vehEl.style.setProperty('--spin', Math.max(0.12, 1.2 - Math.abs(g.v) / 220) + 's');
+    vehEl.style.setProperty('--dir', g.v < 0 ? 'reverse' : 'normal');
+    vehEl.style.filter = g.dark > 0.01 ? `brightness(${1 - g.dark * (g.lights ? 0.15 : 0.5)})` : '';
     cargoEl.style.transform = `translate(${W * 0.28}px, ${top - 34 * S}px) translateX(-50%)`;
+
+    // חושך במנהרה + פנסים
+    if (g.dark > 0.01) {
+      ctx.fillStyle = `rgba(8,10,30,${0.62 * g.dark})`; ctx.fillRect(0, 0, W, H);
+      for (const f of feats) if (f.type === 'tunnel')
+        for (let d = f.x0 + 45; d < f.x1; d += 90) {
+          const lx = sx(d), ly = roadBase - 102 * S;
+          const gl = ctx.createRadialGradient(lx, ly, 0, lx, ly, 26 * S);
+          gl.addColorStop(0, 'rgba(255,204,128,.9)'); gl.addColorStop(1, 'rgba(255,204,128,0)');
+          ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(lx, ly, 26 * S, 0, 7); ctx.fill();
+        }
+      if (g.lights) {
+        const hx = W * 0.28 + vw * 0.46, hy = top + vh * 0.6;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const gr = ctx.createLinearGradient(hx, 0, hx + 260 * S, 0);
+        gr.addColorStop(0, `rgba(255,240,170,${0.55 * g.dark})`); gr.addColorStop(1, 'rgba(255,240,170,0)');
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.moveTo(hx, hy - 6 * S); ctx.lineTo(hx + 260 * S, hy - 60 * S); ctx.lineTo(hx + 260 * S, hy + 50 * S); ctx.lineTo(hx, hy + 6 * S); ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 
   // ---------- שליטה ----------
@@ -756,6 +1071,13 @@ function stationDrive() {
   }
   hold(document.getElementById('gas'), 'gas');
   hold(document.getElementById('brake'), 'brake');
+  hold(document.getElementById('rev'), 'rev');
+  lightsBtn.onclick = () => {
+    Sound.unlock(); Sound.play('click');
+    g.lights = !g.lights;
+    lightsBtn.classList.toggle('active', g.lights);
+    Sound.say(g.lights ? 'הפנסים דולקים!' : 'כיבינו את הפנסים');
+  };
 
   hornBtn.onclick = () => {
     Sound.unlock();
@@ -764,6 +1086,7 @@ function stationDrive() {
       hornBtn.classList.toggle('active', g.siren);
     } else {
       Sound.play(VEHICLES[g.type].sound);
+      if (g.dark > 0.3) { setTimeout(() => Sound.play(VEHICLES[g.type].sound), 260); setTimeout(() => Sound.play(VEHICLES[g.type].sound), 560); }   // הד במנהרה
     }
     vehEl.classList.remove('honk'); void vehEl.offsetWidth; vehEl.classList.add('honk');
   };
@@ -787,7 +1110,8 @@ function stationDrive() {
   const keys = e => {
     const down = e.type === 'keydown';
     if (e.key === 'ArrowRight' || e.key === 'ArrowUp') g.gas = down;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') g.brake = down;
+    if (e.key === 'ArrowLeft') g.rev = down;
+    if (e.key === 'ArrowDown') g.brake = down;
     if (down && e.key === ' ') hornBtn.onclick();
   };
   window.addEventListener('keydown', keys);

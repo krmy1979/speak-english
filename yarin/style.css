@@ -517,3 +517,18 @@ button { font-family: inherit; border: none; cursor: pointer; background: none; 
   .station-tile:not(.st-drive) { width: 20vmin; height: 20vmin; }
   .station-tile:not(.st-drive) .st-icon { font-size: 9vmin; }
 }
+
+/* ---------- רוורס, פנסים ---------- */
+.veh.driving .wheel { animation-direction: var(--dir, normal); }
+.pedal-col { display: flex; flex-direction: column; gap: 10px; }
+.pedal.rev { width: clamp(74px, 20vmin, 110px); height: clamp(60px, 15vmin, 86px); background: linear-gradient(#42A5F5, #1565C0); }
+.pedal.rev b { font-size: clamp(20px, 6vmin, 32px); }
+.round-btn.lights { border-color: #FFC107; }
+.round-btn.lights.active { background: #FFF8E1; border-color: #FFB300; animation: none; box-shadow: 0 0 18px #FFD54F, 0 6px 0 rgba(0,0,0,.25); }
+@media (orientation: portrait) {
+  .ctrl-left { flex-wrap: wrap-reverse; max-width: calc(2 * clamp(70px, 19vmin, 104px) + 12px); }
+}
+@media (orientation: landscape) {
+  .pedal-col { flex-direction: row; align-items: flex-end; }
+  .pedal.rev { height: clamp(80px, 22vmin, 120px); }
+}
