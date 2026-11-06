@@ -818,6 +818,7 @@ function stationDrive() {
   if (qs.get('auto')) g.gas = true;
   if (qs.get('v') && VEHICLES[qs.get('v')]) setVehicle(qs.get('v'));
   if (qs.get('fuel')) g.fuel = +qs.get('fuel');
+  if (qs.get('debug')) window.__dbg = { g, vehX, doSpecial };
   later(() => Sound.say(`${PLAYER_NAME} על ההגה! לחץ על הדוושה הירוקה כדי לנסוע`), 400);
   hint('לחץ והחזק את ▲ כדי לנסוע', 4500);
   raf = requestAnimationFrame(frame);
