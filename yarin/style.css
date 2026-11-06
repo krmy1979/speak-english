@@ -400,3 +400,120 @@ button { font-family: inherit; border: none; cursor: pointer; background: none; 
   .wash-car { left: 32%; }
   .drive-by { bottom: 1%; width: 26vmin; }
 }
+
+/* =========================================================
+   מצב נסיעה
+   ========================================================= */
+.drive canvas { position: absolute; inset: 0; display: block; touch-action: none; }
+.veh {
+  position: absolute; left: 0; top: 0; z-index: 3;
+  transform-origin: 50% 92%; will-change: transform; cursor: pointer;
+}
+.veh.driving .wheel { animation: spin var(--spin, .4s) linear infinite; }
+.veh.squash .vehicle-svg { animation: squash .35s; transform-origin: 50% 100%; }
+.veh.honk .vehicle-svg { animation: bounce .4s; }
+@keyframes squash { 0%,100% { transform: scale(1,1); } 40% { transform: scale(1.12,.85); } 70% { transform: scale(.96,1.05); } }
+.vt-police .beacon.b2 { animation-delay: .25s; }
+
+.cargo {
+  position: absolute; left: 0; top: 0; z-index: 4;
+  background: rgba(255,255,255,.92); border-radius: 999px;
+  padding: 2px 10px; font-size: clamp(20px, 6vmin, 34px); line-height: 1.3;
+  box-shadow: 0 3px 0 rgba(0,0,0,.15); white-space: nowrap; pointer-events: none;
+}
+
+.hud {
+  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top) + 72px);
+  display: flex; gap: 10px; align-items: center;
+}
+.fuel {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.9); border-radius: 999px; padding: 4px 10px;
+  box-shadow: 0 3px 0 rgba(0,0,0,.15); font-size: 22px;
+}
+.fuel-bar { width: clamp(70px, 22vw, 140px); height: 14px; border-radius: 7px; background: #CFD8DC; overflow: hidden; direction: ltr; }
+.fuel-bar i { display: block; height: 100%; width: 100%; background: #43A047; transition: width .3s, background .3s; }
+.swap-btn {
+  white-space: nowrap;
+  background: rgba(255,255,255,.9); border-radius: 999px; padding: 6px 14px;
+  font-size: 20px; font-weight: bold; color: #1E3A8A; box-shadow: 0 3px 0 rgba(0,0,0,.15);
+}
+
+.biome-banner {
+  position: absolute; z-index: 6; left: 50%; top: 30%;
+  transform: translate(-50%, -50%) scale(0); opacity: 0;
+  background: #fff; color: #1E3A8A; font-weight: 900;
+  font-size: clamp(28px, 10vmin, 60px); padding: .2em .7em; border-radius: 999px;
+  box-shadow: 0 6px 0 rgba(0,0,0,.18); pointer-events: none; white-space: nowrap;
+}
+.biome-banner.show { animation: bannerIn 2.6s ease forwards; }
+@keyframes bannerIn {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  25%, 80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -80%) scale(.8); opacity: 0; }
+}
+
+.drive-hint {
+  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top) + 124px); max-width: 92vw; width: max-content;
+  background: rgba(30,58,138,.88); color: #fff; font-weight: bold;
+  font-size: clamp(16px, 4.6vmin, 28px); padding: .35em .9em; border-radius: 999px; text-align: center;
+  pointer-events: none;
+}
+
+.ctrl {
+  position: absolute; z-index: 7; bottom: calc(env(safe-area-inset-bottom) + 14px);
+  display: flex; gap: 12px; align-items: flex-end;
+}
+.ctrl-right { right: calc(env(safe-area-inset-right) + 14px); }
+.ctrl-left { left: calc(env(safe-area-inset-left) + 14px); }
+.pedal {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-weight: 900; border-radius: 22px;
+  box-shadow: 0 7px 0 rgba(0,0,0,.3); transition: transform .08s, box-shadow .08s;
+  touch-action: none;
+}
+.pedal b { font-size: clamp(26px, 8vmin, 44px); line-height: 1; }
+.pedal small { font-size: clamp(14px, 4vmin, 22px); }
+.pedal.gas { width: clamp(84px, 24vmin, 130px); height: clamp(118px, 34vmin, 180px); background: linear-gradient(#66BB6A, #2E7D32); }
+.pedal.brake { width: clamp(74px, 20vmin, 110px); height: clamp(80px, 22vmin, 120px); background: linear-gradient(#EF5350, #C62828); }
+.pedal.down { transform: translateY(6px) scale(.97); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+.round-btn {
+  width: clamp(70px, 19vmin, 104px); height: clamp(70px, 19vmin, 104px); border-radius: 50%;
+  background: #fff; font-size: clamp(32px, 9vmin, 50px);
+  box-shadow: 0 6px 0 rgba(0,0,0,.25); border: 4px solid #FFD23F;
+}
+.round-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+.round-btn.special { border-color: #29B6F6; }
+.round-btn.active { background: #FFEBEE; border-color: #E53935; animation: pulse .7s infinite; }
+
+.picker {
+  position: absolute; inset: 0; z-index: 20; background: rgba(30,58,138,.5);
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+}
+.picker-card { background: #FFF3E0; border-radius: 24px; padding: 14px; max-height: 92%; overflow: auto; width: min(96vw, 760px); }
+.picker-title { text-align: center; font-size: clamp(22px, 6vmin, 36px); font-weight: 900; color: #5D4037; margin-bottom: 10px; }
+.picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.picker-grid .garage-card svg { max-height: 16vmin; }
+@media (orientation: landscape) { .picker-grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* גראז' עם 9 רכבים */
+.garage-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 2vmin; }
+.garage-card svg { max-height: 16vmin; }
+@media (orientation: landscape) { .garage-grid { grid-template-columns: repeat(5, 1fr) !important; } }
+
+/* כרטיס הנסיעה במפה – גדול */
+.station-tile.st-drive {
+  grid-column: 1 / -1; width: auto; height: 26vw; flex-direction: row; gap: 3vw;
+  background: linear-gradient(135deg, #FFB300, #FB8C00);
+}
+.st-drive .st-icon { font-size: 15vw; }
+.st-drive .st-name { font-size: clamp(22px, 7vw, 44px); }
+@media (orientation: landscape) {
+  .station-tile.st-drive { height: 15vmin; }
+  .st-drive .st-icon { font-size: 10vmin; }
+  .station-tile:not(.st-drive) { width: 20vmin; height: 20vmin; }
+  .station-tile:not(.st-drive) .st-icon { font-size: 9vmin; }
+}

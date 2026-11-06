@@ -96,13 +96,57 @@ const Sound = (() => {
     win() {
       [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, 'triangle', 0.22, i * 0.12));
     },
-    drive() { tone(90, 1.2, 'sawtooth', 0.08, 0, 160); }
+    drive() { tone(90, 1.2, 'sawtooth', 0.08, 0, 160); },
+    boing() { tone(180, 0.35, 'sine', 0.3, 0, 620); },
+    land()  { tone(120, 0.15, 'sine', 0.3, 0, 60); noise(0.12, 0.15, 0, 500); },
+    glug()  { for (let i = 0; i < 5; i++) tone(160 + i * 25, 0.12, 'sine', 0.22, i * 0.18, 90); },
+    water() { noise(0.45, 0.22, 0, 3500); },
+    star()  { tone(880, 0.08, 'triangle', 0.18); tone(1320, 0.12, 'triangle', 0.18, 0.07); },
+    siren1() {
+      tone(700, 0.35, 'triangle', 0.15, 0, 1000);
+      tone(1000, 0.35, 'triangle', 0.15, 0.35, 700);
+    },
+    door()  { tone(500, 0.1, 'square', 0.1); tone(350, 0.12, 'square', 0.1, 0.1); }
   };
 
+  // ---- מנוע רציף שהצליל שלו עולה עם המהירות ----
+  let eng = null;
+  function engine(frac) {
+    if (muted || !ctx) return;
+    if (!eng) {
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 420; g.gain.value = 0;
+      o.connect(f).connect(g).connect(ctx.destination);
+      o.start();
+      eng = { o, g };
+    }
+    const t = ctx.currentTime;
+    eng.o.frequency.setTargetAtTime(42 + frac * 115, t, 0.12);
+    eng.g.gain.setTargetAtTime(0.03 + frac * 0.06, t, 0.2);
+  }
+  function engineStop() {
+    if (!eng || !ctx) { eng = null; return; }
+    const e = eng; eng = null;
+    e.g.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+    setTimeout(() => { try { e.o.stop(); } catch (_) {} }, 400);
+  }
+
+  // ---- סירנה בלולאה ----
+  let sirenTimer = null;
+  function sirenLoop(on) {
+    clearInterval(sirenTimer); sirenTimer = null;
+    if (on && !muted) { fx.siren1(); sirenTimer = setInterval(fx.siren1, 700); }
+  }
+
   return {
-    unlock, say, fx,
+    unlock, say, fx, engine, engineStop, sirenLoop,
     play(name) { fx[name] && fx[name](); },
-    toggleMute() { muted = !muted; if (muted && 'speechSynthesis' in window) speechSynthesis.cancel(); return muted; },
+    speaking() { return 'speechSynthesis' in window && speechSynthesis.speaking; },
+    toggleMute() {
+      muted = !muted;
+      if (muted) { if ('speechSynthesis' in window) speechSynthesis.cancel(); engineStop(); sirenLoop(false); }
+      return muted;
+    },
     isMuted() { return muted; }
   };
 })();

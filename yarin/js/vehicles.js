@@ -9,7 +9,10 @@ const VEHICLES = {
   mixer:     { name: 'מערבל בטון', the: 'המערבל',    color: '#FDD835', sound: 'horn' },
   fire:      { name: 'כבאית',      the: 'הכבאית',    color: '#E53935', sound: 'siren' },
   ambulance: { name: 'אמבולנס',    the: 'האמבולנס',  color: '#FFFFFF', sound: 'siren' },
-  sport:     { name: 'מכונית מרוץ', the: 'מכונית המרוץ', color: '#1E88E5', sound: 'vroom' }
+  sport:     { name: 'מכונית מרוץ', the: 'מכונית המרוץ', color: '#1E88E5', sound: 'vroom' },
+  bus:       { name: 'אוטובוס',    the: 'האוטובוס',  color: '#43A047', sound: 'horn' },
+  police:    { name: 'ניידת משטרה', the: 'הניידת',   color: '#FFFFFF', sound: 'siren' },
+  tractor:   { name: 'טרקטור',     the: 'הטרקטור',   color: '#7CB342', sound: 'vroom' }
 };
 
 // צבע כהה יותר לקווי מתאר
@@ -160,9 +163,64 @@ function drawAmbulance(c) {
     ${wheel(42, 100)} ${wheel(156, 100)}`;
 }
 
+function drawBus(c) {
+  const d = darken(c);
+  const wins = [16, 46, 76, 106].map(x =>
+    `<rect x="${x}" y="32" width="24" height="24" rx="4" fill="#dff4ff" stroke="${d}" stroke-width="2.5"/>`).join('');
+  return `
+    ${shadow()}
+    <path d="M6 30 Q6 16 20 16 L170 16 Q184 16 188 30 L194 60 L194 96 L6 96 Z" fill="${c}" stroke="${d}" stroke-width="4" stroke-linejoin="round"/>
+    ${wins}
+    <path d="M140 58 L140 26 L172 26 Q180 26 182 34 L188 58 Z" fill="#dff4ff" stroke="${d}" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="6" y="64" width="188" height="8" fill="#FFD23F"/>
+    <rect x="112" y="62" width="20" height="34" rx="2" fill="#dff4ff" stroke="${d}" stroke-width="2.5"/>
+    ${eye(164, 44)}
+    <circle cx="186" cy="80" r="6" fill="#fff6c2" stroke="${d}" stroke-width="2.5"/>
+    ${smile(170, 86)}
+    ${wheel(44, 100)} ${wheel(160, 100)}`;
+}
+
+function drawPolice(c) {
+  const d = c.toLowerCase() === '#ffffff' ? '#90a4ae' : darken(c);
+  return `
+    ${shadow()}
+    <rect class="beacon" x="82" y="14" width="16" height="10" rx="3" fill="#ef5350"/>
+    <rect class="beacon b2" x="98" y="14" width="16" height="10" rx="3" fill="#42a5f5"/>
+    <path d="M52 58 Q60 24 100 22 Q136 24 146 58 Z" fill="${c}" stroke="${d}" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M104 56 L106 30 Q130 30 138 56 Z" fill="#dff4ff" stroke="${d}" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M62 56 Q68 30 98 30 L98 56 Z" fill="#dff4ff" stroke="${d}" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="12" y="54" width="176" height="46" rx="20" fill="${c}" stroke="${d}" stroke-width="4"/>
+    <rect x="12" y="68" width="176" height="12" fill="#1E3A8A"/>
+    ${eye(122, 44)}
+    <circle cx="178" cy="62" r="6" fill="#fff6c2" stroke="${d}" stroke-width="2.5"/>
+    ${smile(166, 90)}
+    ${wheel(52, 100)} ${wheel(150, 100)}`;
+}
+
+function drawTractor(c) {
+  const d = darken(c);
+  return `
+    ${shadow()}
+    <rect x="150" y="18" width="8" height="34" rx="3" fill="#455a64"/>
+    <path d="M30 28 L96 28 L104 80 L30 80 Z" fill="${c}" stroke="${d}" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="40" y="36" width="50" height="30" rx="5" fill="#dff4ff" stroke="${d}" stroke-width="3"/>
+    <path d="M96 52 L184 52 Q192 52 192 62 L192 96 L96 96 Z" fill="${c}" stroke="${d}" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="22" y="22" width="88" height="10" rx="4" fill="${d}"/>
+    ${eye(74, 50)}
+    <circle cx="186" cy="68" r="6" fill="#fff6c2" stroke="${d}" stroke-width="2.5"/>
+    ${smile(172, 80)}
+    <g class="wheel" style="transform-origin:58px 88px">
+      <circle cx="58" cy="88" r="30" fill="#23262d"/>
+      <circle cx="58" cy="88" r="16" fill="#FDD835"/>
+      <rect x="55" y="74" width="6" height="28" fill="#c9a800"/>
+    </g>
+    ${wheel(160, 102, 16)}`;
+}
+
 const DRAWERS = {
   car: drawCar, sport: drawSport, truck: drawTruck,
-  mixer: drawMixer, fire: drawFire, ambulance: drawAmbulance
+  mixer: drawMixer, fire: drawFire, ambulance: drawAmbulance,
+  bus: drawBus, police: drawPolice, tractor: drawTractor
 };
 
 // מחזיר SVG מוכן של רכב

@@ -43,11 +43,13 @@ const shuffle = arr => arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 let timers = [];
+let screenCleanup = null;   // מסך הנסיעה רושם כאן פונקציית ניקוי
 function later(fn, ms) { const t = setTimeout(fn, ms); timers.push(t); return t; }
 function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 
 function setScreen(html, cls = '') {
   clearTimers();
+  if (screenCleanup) { screenCleanup(); screenCleanup = null; }
   app.className = cls;
   app.innerHTML = html;
 }
@@ -153,7 +155,7 @@ function showGarage() {
     <div class="scene garage">
       <div class="garage-title">🛠️ המוסך של ${PLAYER_NAME}</div>
       <div class="garage-grid">${cards}</div>
-      <button class="btn btn-big btn-green" id="go">🗺️ סע לעיר!</button>
+      <button class="btn btn-big btn-green" id="go">🛣️ יוצאים לטיול!</button>
     </div>`, 'screen-garage');
 
   app.querySelectorAll('.garage-card').forEach(b => {
@@ -166,13 +168,14 @@ function showGarage() {
       Sound.say(VEHICLES[k].name);
     };
   });
-  document.getElementById('go').onclick = () => { Sound.play('tap'); showMap(true); };
+  document.getElementById('go').onclick = () => { Sound.play('tap'); stationDrive(); };
 }
 
 // =========================================================
 //  מפה – בוחרים תחנה
 // =========================================================
 const STATIONS = [
+  { id: 'drive',   icon: '🛣️', name: 'יוצאים לטיול', say: 'יוצאים לטיול!',                    go: () => stationDrive() },
   { id: 'traffic', icon: '🚦', name: 'רמזור',        say: 'רמזור! בוא נלמד מתי נוסעים',      go: () => stationTraffic() },
   { id: 'build',   icon: '🧱', name: 'אתר בנייה',    say: 'אתר בנייה! בוא נבנה בית',          go: () => stationBuild() },
   { id: 'fire',    icon: '🔥', name: 'הצלה',          say: 'שריפה! צריך לעזור',                go: () => stationFire() },
@@ -500,7 +503,7 @@ function stationWash() {
 // ---------- התחלה ----------
 // לבדיקות: אפשר לפתוח ישר מסך מסוים, למשל index.html#fire
 const START = {
-  garage: showGarage, map: showMap,
+  garage: showGarage, map: showMap, drive: stationDrive,
   traffic: stationTraffic, build: stationBuild, fire: stationFire, wash: stationWash
 }[location.hash.slice(1)];
 (START || showTitle)();
