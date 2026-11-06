@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5BC8FF"/>
+      <stop offset="1" stop-color="#B9ECFF"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF5A4E"/>
+      <stop offset="1" stop-color="#D62F2F"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D8F3FF"/>
+    </linearGradient>
+    <clipPath id="round"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <!-- sky -->
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <!-- sun -->
+    <circle cx="420" cy="92" r="46" fill="#FFD23F"/>
+    <circle cx="420" cy="92" r="62" fill="#FFD23F" opacity="0.25"/>
+    <!-- clouds -->
+    <g fill="#FFFFFF">
+      <ellipse cx="96" cy="190" rx="44" ry="20"/>
+      <ellipse cx="128" cy="178" rx="30" ry="22"/>
+      <ellipse cx="400" cy="200" rx="36" ry="16"/>
+      <ellipse cx="424" cy="190" rx="24" ry="18"/>
+    </g>
+    <!-- hills -->
+    <ellipse cx="110" cy="420" rx="210" ry="80" fill="#7ED957"/>
+    <ellipse cx="420" cy="430" rx="220" ry="85" fill="#5CC23D"/>
+    <!-- road -->
+    <rect x="0" y="420" width="512" height="92" fill="#4A4F5A"/>
+    <g fill="#FFD23F">
+      <rect x="20" y="462" width="56" height="10" rx="5"/>
+      <rect x="120" y="462" width="56" height="10" rx="5"/>
+      <rect x="220" y="462" width="56" height="10" rx="5"/>
+      <rect x="320" y="462" width="56" height="10" rx="5"/>
+      <rect x="420" y="462" width="56" height="10" rx="5"/>
+    </g>
+
+    <!-- ===== Cute original car (front-facing) ===== -->
+    <!-- shadow -->
+    <ellipse cx="256" cy="440" rx="150" ry="14" fill="#000" opacity="0.25"/>
+    <!-- wheels -->
+    <rect x="120" y="380" width="58" height="62" rx="18" fill="#22252B"/>
+    <rect x="334" y="380" width="58" height="62" rx="18" fill="#22252B"/>
+    <!-- roof / cabin -->
+    <path d="M168 300 Q176 226 256 222 Q336 226 344 300 Z" fill="url(#body)" stroke="#8E1B1B" stroke-width="6" stroke-linejoin="round"/>
+    <!-- windshield with eyes -->
+    <path d="M186 296 Q194 244 256 240 Q318 244 326 296 Z" fill="url(#glass)" stroke="#8E1B1B" stroke-width="5" stroke-linejoin="round"/>
+    <!-- eyes -->
+    <ellipse cx="230" cy="272" rx="15" ry="18" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="3"/>
+    <ellipse cx="282" cy="272" rx="15" ry="18" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="3"/>
+    <circle cx="234" cy="276" r="8" fill="#2B2B2B"/>
+    <circle cx="286" cy="276" r="8" fill="#2B2B2B"/>
+    <circle cx="237" cy="272" r="3" fill="#FFFFFF"/>
+    <circle cx="289" cy="272" r="3" fill="#FFFFFF"/>
+    <!-- body -->
+    <rect x="110" y="294" width="292" height="110" rx="40" fill="url(#body)" stroke="#8E1B1B" stroke-width="6"/>
+    <!-- headlights -->
+    <circle cx="160" cy="336" r="22" fill="#FFF6C2" stroke="#8E1B1B" stroke-width="5"/>
+    <circle cx="352" cy="336" r="22" fill="#FFF6C2" stroke="#8E1B1B" stroke-width="5"/>
+    <circle cx="154" cy="330" r="6" fill="#FFFFFF"/>
+    <circle cx="346" cy="330" r="6" fill="#FFFFFF"/>
+    <!-- smile grille -->
+    <path d="M206 338 Q256 384 306 338" fill="none" stroke="#5C0F0F" stroke-width="9" stroke-linecap="round"/>
+    <!-- cheeks -->
+    <circle cx="196" cy="370" r="10" fill="#FF9AA2" opacity="0.8"/>
+    <circle cx="316" cy="370" r="10" fill="#FF9AA2" opacity="0.8"/>
+    <!-- bumper -->
+    <rect x="132" y="388" width="248" height="18" rx="9" fill="#F2F2F2" stroke="#8E1B1B" stroke-width="4"/>
+    <!-- roof light (rescue hint) -->
+    <rect x="236" y="204" width="40" height="22" rx="8" fill="#FFD23F" stroke="#8E1B1B" stroke-width="4"/>
+    <rect x="242" y="208" width="12" height="12" rx="3" fill="#FFF6C2"/>
+  </g>
+
+  <!-- ===== Name badge ===== -->
+  <g font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold" text-anchor="middle">
+    <text x="256" y="148" font-size="112" fill="#FFFFFF" stroke="#1E3A8A" stroke-width="18" stroke-linejoin="round" paint-order="stroke">ירין</text>
+    <rect x="146" y="166" width="220" height="44" rx="22" fill="#FFD23F" stroke="#1E3A8A" stroke-width="5"/>
+    <text x="256" y="199" font-size="30" fill="#1E3A8A">על ההגה</text>
+  </g>
+</svg>
